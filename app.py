@@ -257,54 +257,33 @@ def classify_tokens(text):
 
         color = color_dict.get(label, "#D3D3D3")
         tooltip = f"{label} ({score:.2f})"
-
-        style_block = """
-        <style>
-          span:hover .tooltip {
-            visibility: visible;
-          }
-        </style>
-        """
-
-        output += f"""
-        <span style='position: relative; background-color: {color}; padding: 2px; border-radius: 4px; margin-right: 2px;'>
-          {word}
-          <span style='
-            visibility: hidden;
-            background-color: black;
-            color: #fff;
-            text-align: center;
-            border-radius: 4px;
-            padding: 2px 6px;
-            position: absolute;
-            z-index: 1;
-            bottom: 120%;
-            left: 50%;
-            transform: translateX(-50%);
-            white-space: nowrap;
-            font-size: 0.75rem;
-          ' class='tooltip'>{label}</span>
-        </span>
-        """
+        output += (
+            f"<span style='background-color: {color}; padding: 2px; border-radius: 4px;' "
+            f"title='{tooltip}'>{word}</span>"
+        )
         last_idx = end
 
     output += html.escape(text[last_idx:])
 
-    style_block = """
-    <style>
-      span:hover .tooltip {
-        visibility: visible;
-      }
-    </style>
-    """
 
-    return f"{style_block}<div style='font-family: sans-serif; line-height: 1.6;'>{output}</div>"
+    table = [
+        [entity["word"], entity["entity_group"], f"{entity['score']:.2f}"]
+        for entity in sorted_results
+    ]
+
+    # Return both: HTML and table
+    styled_html = f"<div style='font-family: sans-serif; line-height: 1.6;'>{output}</div>"
+    return styled_html, table
+
 
 
 iface = gr.Interface(
     fn=classify_tokens,
     inputs=gr.Textbox(lines=4, placeholder="Enter a sentence...", label="Input Text"),
-    outputs=gr.HTML(label="SNACS Tagged Sentence"),
+    outputs=[
+        gr.HTML(label="SNACS Tagged Sentence"),
+        gr.Dataframe(headers=["Token", "SNACS Label", "Confidence"], label="SNACS Table")
+    ],
     title="SNACS English Classification",
     description="SNACS English Classification. See the <a href='https://arxiv.org/abs/1704.02134'>SNACS guidelines</a> for details.",
     theme="default"
