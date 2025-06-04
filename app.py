@@ -11,7 +11,7 @@ from transformers import pipeline
 
 @spaces.GPU  # <-- required for ZeroGPU
 def classify_tokens(text):
-    
+
     color_dict = {'None': '#6adf97',
               'O': '#f18621',
               'B-p.Purpose-p.Purpose': '#554065',
@@ -22,6 +22,7 @@ def classify_tokens(text):
               'B-p.Originator-p.Source': '#a08323',
               'B-p.Recipient-p.Goal': '#725be0',
               'B-p.Possessor-p.Possessor': '#b5ce9e',
+              'p.Possessor-p.Possessor': '#b5ce9e',
               'B-p.Gestalt-p.Gestalt': '#34a8a9',
               'B-p.Ancillary-p.Ancillary': '#73f29f',
               'I-p.Ancillary-p.Ancillary': '#73f29f',
@@ -30,10 +31,12 @@ def classify_tokens(text):
               'I-p.Source-p.Source': '#5cc334',
               'B-p.Theme-p.Theme': '#5b88c8',
               'B-p.Locus-p.Locus': '#4c39c8',
+              'p.Locus-p.Locus': '#4c39c8',
               'B-p.Characteristic-p.Characteristic': '#661943',
               'B-p.Explanation-p.Explanation': '#852e58',
               'B-p.OrgMember-p.Possessor': '#e3bd42',
               'B-p.Goal-p.Goal': '#6bfc3c',
+              'p.Goal-p.Goal': '#6bfc3c',
               'B-p.Manner-p.Manner': '#436097',
               'B-p.ComparisonRef-p.ComparisonRef': '#4df5a9',
               'B-p.Cost-p.Locus': '#fe5990',
@@ -240,28 +243,23 @@ def classify_tokens(text):
 
     results = token_classifier(text)
 
-    sorted_results = sorted(results, key=lambda x: x["start"])
-    output = ""
-    last_idx = 0
-
-    for prep in sorted_results:
-        start = prep["start"]
-        end = prep["end"]
-        label = prep["entity_group"]
+    for entity in sorted_results:
+        start = entity["start"]
+        end = entity["end"]
+        label = entity["entity_group"]
+        score = entity["score"]
         word = html.escape(text[start:end])
-
-        # Add untagged text before the entity
         output += html.escape(text[last_idx:start])
 
-        # Add highlighted entity
-        color = color_dict.get(label, "#D3D3D3")  # default light gray
-        output += f"<span style='background-color: {color}; padding: 2px; border-radius: 4px;' title='{label}'>{word}</span>"
-
+        color = color_dict.get(label, "#D3D3D3")
+        tooltip = f"{label} ({score:.2f})"
+        output += (
+            f"<span style='background-color: {color}; padding: 2px; border-radius: 4px;' "
+            f"title='{tooltip}'>{word}</span>"
+        )
         last_idx = end
 
-    # Add remaining text
     output += html.escape(text[last_idx:])
-
     return f"<div style='font-family: sans-serif; line-height: 1.6;'>{output}</div>"
 
 
