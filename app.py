@@ -257,14 +257,48 @@ def classify_tokens(text):
 
         color = color_dict.get(label, "#D3D3D3")
         tooltip = f"{label} ({score:.2f})"
-        output += (
-            f"<span style='background-color: {color}; padding: 2px; border-radius: 4px;' "
-            f"title='{tooltip}'>{word}</span>"
-        )
+
+        style_block = """
+        <style>
+          span:hover .tooltip {
+            visibility: visible;
+          }
+        </style>
+        """
+
+        output += f"""
+        <span style='position: relative; background-color: {color}; padding: 2px; border-radius: 4px; margin-right: 2px;'>
+          {word}
+          <span style='
+            visibility: hidden;
+            background-color: black;
+            color: #fff;
+            text-align: center;
+            border-radius: 4px;
+            padding: 2px 6px;
+            position: absolute;
+            z-index: 1;
+            bottom: 120%;
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            font-size: 0.75rem;
+          ' class='tooltip'>{label}</span>
+        </span>
+        """
         last_idx = end
 
     output += html.escape(text[last_idx:])
-    return f"<div style='font-family: sans-serif; line-height: 1.6;'>{output}</div>"
+
+    style_block = """
+    <style>
+      span:hover .tooltip {
+        visibility: visible;
+      }
+    </style>
+    """
+
+    return f"{style_block}<div style='font-family: sans-serif; line-height: 1.6;'>{output}</div>"
 
 
 iface = gr.Interface(
