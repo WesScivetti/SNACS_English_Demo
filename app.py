@@ -243,6 +243,10 @@ def classify_tokens(text):
 
     results = token_classifier(text)
 
+    sorted_results = sorted(results, key=lambda x: x["start"])
+    output = ""
+    last_idx = 0
+
     for entity in sorted_results:
         start = entity["start"]
         end = entity["end"]
