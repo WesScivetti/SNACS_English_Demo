@@ -1,5 +1,6 @@
 import gradio as gr
 from transformers import pipeline
+import spaces
 
 # Load the pipeline (token classification)
 #token_classifier = pipeline("token-classification", model="WesScivetti/SNACS_English", aggregation_strategy="simple")
