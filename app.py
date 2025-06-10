@@ -195,7 +195,7 @@ def classify_tokens(text):
               'p.Whole-p.Circumstance': '#c70411',
               'p.Purpose-p.Goal': '#f2f199'}
 
-    token_classifier = pipeline("token-classification", model="WesScivetti/SNACS_English",
+    token_classifier = pipeline("token-classification", model="WesScivetti/SNACS_Multilingual",
                                 aggregation_strategy="simple")
 
     results = token_classifier(text)
