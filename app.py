@@ -244,7 +244,7 @@ def classify_tokens(text):
         color = color_dict.get(label, "#D3D3D3")
 
         table_html += "<tr>"
-        table_html += f"<td style='border: 1px solid #ccc; padding: 6px;'>{token}</td>"
+        table_html += f"<td style='border: 1px solid #ccc; padding: 6px; background-color: {color};'>{token}</td>"
         table_html += (
             f"<td style='border: 1px solid #ccc; padding: 6px; background-color: {color};'>{label}</td>"
         )
