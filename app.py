@@ -230,8 +230,30 @@ def classify_tokens(text):
 
     # Return both: HTML and table
     styled_html = f"<div style='font-family: sans-serif; line-height: 1.6;'>{output}</div>"
-    return styled_html, table
 
+    # Generate a colored HTML table
+    table_html = "<table style='border-collapse: collapse; font-family: sans-serif;'>"
+    table_html += "<tr><th style='border: 1px solid #ccc; padding: 6px;'>Token</th>"
+    table_html += "<th style='border: 1px solid #ccc; padding: 6px;'>SNACS Label</th>"
+    table_html += "<th style='border: 1px solid #ccc; padding: 6px;'>Confidence</th></tr>"
+
+    for entity in sorted_results:
+        token = html.escape(entity["word"])
+        label = entity["entity_group"]
+        score = f"{entity['score']:.2f}"
+        color = color_dict.get(label, "#D3D3D3")
+
+        table_html += "<tr>"
+        table_html += f"<td style='border: 1px solid #ccc; padding: 6px;'>{token}</td>"
+        table_html += (
+            f"<td style='border: 1px solid #ccc; padding: 6px; background-color: {color};'>{label}</td>"
+        )
+        table_html += f"<td style='border: 1px solid #ccc; padding: 6px;'>{score}</td>"
+        table_html += "</tr>"
+
+    table_html += "</table>"
+
+    return styled_html, table_html
 
 
 iface = gr.Interface(
@@ -239,11 +261,27 @@ iface = gr.Interface(
     inputs=gr.Textbox(lines=4, placeholder="Enter a sentence...", label="Input Text"),
     outputs=[
         gr.HTML(label="SNACS Tagged Sentence"),
-        gr.Dataframe(headers=["Token", "SNACS Label", "Confidence"], label="SNACS Table")
+        gr.HTML(label="SNACS Table with Colored Labels")
     ],
     title="SNACS Classification",
     description="SNACS Classification. Now Multilingual! See the <a href='https://arxiv.org/abs/1704.02134'>SNACS guidelines</a> for details.",
     theme="default"
 )
+
+
+
+
+
+# iface = gr.Interface(
+#     fn=classify_tokens,
+#     inputs=gr.Textbox(lines=4, placeholder="Enter a sentence...", label="Input Text"),
+#     outputs=[
+#         gr.HTML(label="SNACS Tagged Sentence"),
+#         gr.Dataframe(headers=["Token", "SNACS Label", "Confidence"], label="SNACS Table")
+#     ],
+#     title="SNACS Classification",
+#     description="SNACS Classification. Now Multilingual! See the <a href='https://arxiv.org/abs/1704.02134'>SNACS guidelines</a> for details.",
+#     theme="default"
+# )
 
 iface.launch()
