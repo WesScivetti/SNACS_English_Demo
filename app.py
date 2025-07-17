@@ -214,12 +214,14 @@ def classify_tokens(text):
 
         color = color_dict.get(label, "#D3D3D3")
         tooltip = f"{label} ({score:.2f})"
+        word_with_label = f"{word}_{label}"
+
         output += (
             f"<span style='background-color: {color}; padding: 2px; border-radius: 4px;' "
-            f"title='{tooltip}'>{word}</span>"
+            f"title='{tooltip}'>{word_with_label}</span>"
         )
-        last_idx = end
 
+        last_idx = end
     output += html.escape(text[last_idx:])
 
 
@@ -268,21 +270,5 @@ iface = gr.Interface(
     description="SNACS Classification. Now Multilingual! See the <a href='https://arxiv.org/abs/1704.02134'>SNACS guidelines</a> for details.",
     theme="default"
 )
-
-
-
-
-
-# iface = gr.Interface(
-#     fn=classify_tokens,
-#     inputs=gr.Textbox(lines=4, placeholder="Enter a sentence...", label="Input Text"),
-#     outputs=[
-#         gr.HTML(label="SNACS Tagged Sentence"),
-#         gr.Dataframe(headers=["Token", "SNACS Label", "Confidence"], label="SNACS Table")
-#     ],
-#     title="SNACS Classification",
-#     description="SNACS Classification. Now Multilingual! See the <a href='https://arxiv.org/abs/1704.02134'>SNACS guidelines</a> for details.",
-#     theme="default"
-# )
 
 iface.launch()
