@@ -1,7 +1,8 @@
 import html
 import gradio as gr
 import spaces
-from transformers import pipeline
+from transformers import pipeline, AutoTokenizer, AutoModelForTokenClassification
+import torch
 
 
 
@@ -11,6 +12,73 @@ from transformers import pipeline
 
 @spaces.GPU  # <-- required for ZeroGPU
 def classify_tokens(text):
+
+
+    def load_token_clf(model_name_or_path, device=None):
+        tok = AutoTokenizer.from_pretrained(model_name_or_path)
+        mdl = AutoModelForTokenClassification.from_pretrained(model_name_or_path)
+        if device is None:
+            device = 0 if torch.cuda.is_available() else -1
+        if device >= 0:
+            mdl = mdl.to(device)
+        return tok, mdl
+
+    @torch.no_grad()
+    def tokens_with_distributions(tokenizer, model, text, *, truncation=True):
+        """
+        Returns a list of dicts, one per *subword token* (special tokens excluded):
+          {
+            'token': str,              # the tokenizer piece (e.g., '▁Montréal' or '##n')
+            'text': str,               # exact substring from the original text
+            'start': int, 'end': int,  # char offsets into `text`
+            'probs': {label: float, ...},   # full distribution over all labels
+            'top_label': str,          # argmax label (convenience)
+            'top_score': float         # argmax prob (convenience)
+          }
+        """
+        enc = tokenizer(
+            text,
+            return_tensors="pt",
+            return_offsets_mapping=True,
+            truncation=truncation
+        )
+        offset_mapping = enc.pop("offset_mapping")[0]  # (seq_len, 2)
+        input_ids = enc["input_ids"][0]
+        # Move tensors to model device
+        enc = {k: v.to(model.device) for k, v in enc.items()}
+
+        logits = model(**enc).logits[0]  # (seq_len, num_labels)
+        probs = torch.softmax(logits, dim=-1)
+
+        id2label = model.config.id2label
+        # Ensure indexable by int
+        if isinstance(id2label, dict):
+            id2label = {int(k): v for k, v in id2label.items()}
+
+        out = []
+        for i, (start, end) in enumerate(offset_mapping.tolist()):
+            # Skip special tokens that have (0, 0) or otherwise map to no chars
+            if start == end:
+                continue
+
+            token_str = tokenizer.convert_ids_to_tokens(int(input_ids[i]))
+            # Full distribution over original labels (e.g., B-PER/I-PER/O …)
+            dist = {id2label[j]: float(probs[i, j]) for j in range(probs.shape[-1])}
+            # Argmax for convenience
+            top_j = int(torch.argmax(probs[i]).item())
+            top_label = id2label[top_j]
+            top_score = float(probs[i, top_j])
+
+            out.append({
+                "token": token_str,
+                "text": text[start:end],
+                "start": start,
+                "end": end,
+                "probs": dist,
+                "top_label": top_label,
+                "top_score": top_score,
+            })
+        return out
 
     color_dict = {'None': '#6adf97',
               'O': '#f18621',
@@ -195,8 +263,15 @@ def classify_tokens(text):
               'p.Whole-p.Circumstance': '#c70411',
               'p.Purpose-p.Goal': '#f2f199'}
 
+    #get the probability distributions
+    tok_sn, mdl_sn = load_token_clf("WesScivetti/SNACS_Multilingual")
+    results2 = tokens_with_distributions(tok_sn, mdl_sn, text)
+    sorted_results2 = sorted(results2, key=lambda x: x["start"])
+
     token_classifier = pipeline("token-classification", model="WesScivetti/SNACS_Multilingual",
                                 aggregation_strategy="simple")
+
+
 
     results = token_classifier(text)
 
@@ -224,6 +299,25 @@ def classify_tokens(text):
         last_idx = end
     output += html.escape(text[last_idx:])
 
+    for entity in sorted_results2:
+        start = entity["start"]
+        end = entity["end"]
+        label = entity["entity_group"]
+        score = entity["score"]
+        word = html.escape(text[start:end])
+        output += html.escape(text[last_idx:start])
+
+        color = color_dict.get(label, "#D3D3D3")
+        tooltip = f"{label} ({score:.2f})"
+        word_with_label = f"{word}_{label}"
+
+        output += (
+            f"<span style='background-color: {color}; padding: 2px; border-radius: 4px;' "
+            f"title='{tooltip}'>{word_with_label}</span>"
+        )
+
+        last_idx = end
+    output += html.escape(text[last_idx:])
 
     table = [
         [entity["word"], entity["entity_group"], f"{entity['score']:.2f}"]
@@ -257,6 +351,8 @@ def classify_tokens(text):
     table_html += "</table>"
 
     return styled_html, table_html
+
+
 
 
 iface = gr.Interface(
