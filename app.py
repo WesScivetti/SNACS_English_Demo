@@ -1,37 +1,17 @@
 import html
-from collections import defaultdict
-
 import gradio as gr
 import spaces
 from transformers import pipeline
 
 
-# --- Helper: small CSS for nice tooltips on hover ---
-HOVER_CSS = """
-<style>
-.hover-sentence { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; line-height: 1.8; }
-.tok { position: relative; display: inline-block; }
-.tok .tip {
-  display: none; position: absolute; left: 0; top: 100%; margin-top: 6px;
-  background: #fff; border: 1px solid #d0d7de; border-radius: 8px;
-  box-shadow: 0 8px 28px rgba(0,0,0,.15); z-index: 9999;
-  max-height: 360px; overflow: auto; min-width: 320px; padding: 10px 12px;
-  white-space: normal;
-}
-.tok:hover .tip { display: block; }
-.tip h4 { margin: 0 0 6px 0; font-size: 13px; font-weight: 700; color: #111827; }
-.tip .row { display: grid; grid-template-columns: 1fr auto 120px; align-items: center; gap: 10px; font-size: 12px; padding: 3px 0; }
-.tip .lbl { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-.tip .pct { font-variant-numeric: tabular-nums; }
-.tip .bar { height: 6px; background: #eef2f7; border-radius: 4px; position: relative; }
-.tip .bar > span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
-</style>
-"""
+
+# Load the pipeline (token classification)
+#token_classifier = pipeline("token-classification", model="WesScivetti/SNACS_English", aggregation_strategy="simple")
 
 
 @spaces.GPU  # <-- required for ZeroGPU
-def classify_tokens(text: str):
-    # --- Your original color palette (unchanged) ---
+def classify_tokens(text):
+
     color_dict = {'None': '#6adf97',
               'O': '#f18621',
               'p.Purpose-p.Purpose': '#3cb44b',
@@ -215,130 +195,68 @@ def classify_tokens(text: str):
               'p.Whole-p.Circumstance': '#c70411',
               'p.Purpose-p.Goal': '#f2f199'}
 
-    # Build pipeline (inside the GPU-decorated function)
-    token_classifier = pipeline(
-        "token-classification",
-        model="WesScivetti/SNACS_Multilingual",
-        aggregation_strategy="simple",
-        device=0 if torch.cuda.is_available() else -1
-    )
+    token_classifier = pipeline("token-classification", model="WesScivetti/SNACS_Multilingual",
+                                aggregation_strategy="simple")
 
-    # 1) Aggregated results for top label + spans (for coloring & table)
-    agg = token_classifier(text)
-    agg_sorted = sorted(agg, key=lambda x: x["start"])
+    results = token_classifier(text)
 
-    # 2) Compute full label distributions from model logits (no return_all_scores)
-    tok = token_classifier.tokenizer
-    model = token_classifier.model
-    if torch.cuda.is_available():
-        model = model.to("cuda")
-
-    enc = tok(
-        text,
-        return_offsets_mapping=True,
-        return_tensors="pt",
-        truncation=True
-    )
-    offsets = enc["offset_mapping"][0].tolist()  # list of (start,end) per token
-    # move tensors to device (except offset_mapping which stays on CPU)
-    model_inputs = {k: v.to(model.device) for k, v in enc.items() if k != "offset_mapping"}
-
-    with torch.no_grad():
-        logits = model(**model_inputs).logits  # [1, seq_len, num_labels]
-        probs = torch.softmax(logits, dim=-1)[0]  # [seq_len, num_labels]
-
-    id2label = model.config.id2label
-    num_labels = probs.shape[-1]
-
-    def span_distribution(s, e):
-        # pick token indices whose offset overlaps span [s, e)
-        idxs = [i for i, (a, b) in enumerate(offsets) if max(a, s) < min(b, e) and b > a]
-        if not idxs:
-            return None  # whitespace/punct without token coverage
-        p = probs[idxs].mean(dim=0)  # average over subtokens
-        p = (p / (p.sum() + 1e-12)).tolist()
-        return {id2label[j]: float(p[j]) for j in range(num_labels)}
-
-    # --- Output 1: your original tagged sentence (kept) ---
-    output_html = ""
+    sorted_results = sorted(results, key=lambda x: x["start"])
+    output = ""
     last_idx = 0
-    for ent in agg_sorted:
-        start, end = ent["start"], ent["end"]
-        label, score = ent["entity_group"], ent["score"]
+
+    for entity in sorted_results:
+        start = entity["start"]
+        end = entity["end"]
+        label = entity["entity_group"]
+        score = entity["score"]
         word = html.escape(text[start:end])
-        output_html += html.escape(text[last_idx:start])
+        output += html.escape(text[last_idx:start])
+
         color = color_dict.get(label, "#D3D3D3")
         tooltip = f"{label} ({score:.2f})"
         word_with_label = f"{word}_{label}"
-        output_html += (
-            f"<span style='background-color:{color}; padding:2px; border-radius:4px;' "
+
+        output += (
+            f"<span style='background-color: {color}; padding: 2px; border-radius: 4px;' "
             f"title='{tooltip}'>{word_with_label}</span>"
         )
-        last_idx = end
-    output_html += html.escape(text[last_idx:])
-    styled_html = f"<div style='font-family: sans-serif; line-height:1.6;'>{output_html}</div>"
 
-    # --- Output 2: your original colored table (kept) ---
+        last_idx = end
+    output += html.escape(text[last_idx:])
+
+
+    table = [
+        [entity["word"], entity["entity_group"], f"{entity['score']:.2f}"]
+        for entity in sorted_results
+    ]
+
+    # Return both: HTML and table
+    styled_html = f"<div style='font-family: sans-serif; line-height: 1.6;'>{output}</div>"
+
+    # Generate a colored HTML table
     table_html = "<table style='border-collapse: collapse; font-family: sans-serif;'>"
-    table_html += "<tr><th style='border:1px solid #ccc; padding:6px;'>Token</th>"
-    table_html += "<th style='border:1px solid #ccc; padding:6px;'>SNACS Label</th>"
-    table_html += "<th style='border:1px solid #ccc; padding:6px;'>Confidence</th></tr>"
-    for ent in agg_sorted:
-        token = html.escape(ent["word"])
-        label = ent["entity_group"]
-        score = f"{ent['score']:.2f}"
+    table_html += "<tr><th style='border: 1px solid #ccc; padding: 6px;'>Token</th>"
+    table_html += "<th style='border: 1px solid #ccc; padding: 6px;'>SNACS Label</th>"
+    table_html += "<th style='border: 1px solid #ccc; padding: 6px;'>Confidence</th></tr>"
+
+    for entity in sorted_results:
+        token = html.escape(entity["word"])
+        label = entity["entity_group"]
+        score = f"{entity['score']:.2f}"
         color = color_dict.get(label, "#D3D3D3")
+
         table_html += "<tr>"
-        table_html += f"<td style='border:1px solid #ccc; padding:6px; background-color:{color};'>{token}</td>"
-        table_html += f"<td style='border:1px solid #ccc; padding:6px; background-color:{color};'>{label}</td>"
-        table_html += f"<td style='border:1px solid #ccc; padding:6px;'>{score}</td>"
+        table_html += (
+            f"<td style='border: 1px solid #ccc; padding: 6px; background-color: {color};'>{token}</td>"
+        )
+        table_html += (
+            f"<td style='border: 1px solid #ccc; padding: 6px; background-color: {color};'>{label}</td>"
+        )
+        table_html += f"<td style='border: 1px solid #ccc; padding: 6px;'>{score}</td>"
         table_html += "</tr>"
     table_html += "</table>"
 
-    # --- Output 3: hoverable full sentence with per-token distributions ---
-    hover_parts = [HOVER_CSS, "<div class='hover-sentence'>"]
-    last_idx = 0
-    for ent in agg_sorted:
-        s, e = ent["start"], ent["end"]
-        label = ent["entity_group"]
-        word = html.escape(text[s:e])
-        color = color_dict.get(label, "#D3D3D3")
-        hover_parts.append(html.escape(text[last_idx:s]))  # inter-token text
-
-        scores_map = span_distribution(s, e) or {label: 1.0}
-        # sort labels by prob desc; cap to top-12 for compact tooltip
-        sorted_labels = sorted(scores_map.items(), key=lambda kv: kv[1], reverse=True)[:12]
-
-        tip_rows = []
-        for lbl, prob in sorted_labels:
-            lbl_esc = html.escape(lbl)
-            pct = f"{prob * 100:.1f}%"
-            bar_w = f"{prob * 100:.1f}%"
-            bar_color = color_dict.get(lbl, "#9ca3af")
-            tip_rows.append(
-                f"<div class='row'>"
-                f"<div class='lbl' style='color:{bar_color}'>{lbl_esc}</div>"
-                f"<div class='pct'>{pct}</div>"
-                f"<div class='bar'><span style='background:{bar_color}; width:{bar_w};'></span></div>"
-                f"</div>"
-            )
-        tip_html = f"<div class='tip'><h4>Label probabilities</h4>{''.join(tip_rows)}</div>"
-
-        hover_parts.append(
-            f"<span class='tok' style='background:{color}; padding:2px 3px; border-radius:4px;'>"
-            f"{word}{tip_html}</span>"
-        )
-        last_idx = e
-    hover_parts.append(html.escape(text[last_idx:]))
-    hover_parts.append("</div>")
-    hover_html = "".join(hover_parts)
-
-    # Clean up GPU memory sooner (optional)
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-        torch.cuda.empty_cache()
-
-    return styled_html, table_html, hover_html
+    return styled_html, table_html
 
 
 iface = gr.Interface(
@@ -346,15 +264,11 @@ iface = gr.Interface(
     inputs=gr.Textbox(lines=4, placeholder="Enter a sentence...", label="Input Text"),
     outputs=[
         gr.HTML(label="SNACS Tagged Sentence"),
-        gr.HTML(label="SNACS Table with Colored Labels"),
-        gr.HTML(label="Hover sentence: per-token label distribution"),
+        gr.HTML(label="SNACS Table with Colored Labels")
     ],
     title="SNACS Classification",
-    description=(
-        "SNACS Classification. Now Multilingual! "
-        "See the <a href='https://arxiv.org/abs/1704.02134'>SNACS guidelines</a> for details."
-    ),
-    theme="default",
+    description="SNACS Classification. Now Multilingual! See the <a href='https://arxiv.org/abs/1704.02134'>SNACS guidelines</a> for details.",
+    theme="default"
 )
 
 iface.launch()
