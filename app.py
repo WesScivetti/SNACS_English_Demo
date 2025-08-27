@@ -302,8 +302,9 @@ def classify_tokens(text):
     for entity in sorted_results2:
         start = entity["start"]
         end = entity["end"]
-        label = entity["entity_group"]
-        score = entity["score"]
+        label = entity["top_label"]
+        score = entity["top_score"]
+        dist = entity["probs"]
         word = html.escape(text[start:end])
         output += html.escape(text[last_idx:start])
 
