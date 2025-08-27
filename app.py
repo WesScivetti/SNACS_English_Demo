@@ -304,20 +304,20 @@ def classify_tokens(text):
         end = entity["end"]
         label = entity["top_label"]
         score = entity["top_score"]
-        dist = entity["probs"]
-        word = html.escape(text[start:end])
-        output += html.escape(text[last_idx:start])
-
-        color = color_dict.get(label, "#D3D3D3")
-        tooltip = f"{label} ({score:.2f})"
-        word_with_label = f"{word}_{label}"
-
-        output += (
-            f"<span style='background-color: {color}; padding: 2px; border-radius: 4px;' "
-            f"title='{tooltip}'>{word_with_label}</span>"
-        )
-
-        last_idx = end
+        # dist = entity["probs"]
+        # word = html.escape(text[start:end])
+        # output += html.escape(text[last_idx:start])
+        #
+        # color = color_dict.get(label, "#D3D3D3")
+        # tooltip = f"{label} ({score:.2f})"
+        # word_with_label = f"{word}_{label}"
+        #
+        # output += (
+        #     f"<span style='background-color: {color}; padding: 2px; border-radius: 4px;' "
+        #     f"title='{tooltip}'>{word_with_label}</span>"
+        # )
+        #
+        # last_idx = end
     output += html.escape(text[last_idx:])
 
     table = [
