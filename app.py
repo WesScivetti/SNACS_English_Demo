@@ -264,13 +264,13 @@ def classify_tokens(text):
               'p.Purpose-p.Goal': '#f2f199'}
 
     #get the probability distributions
-    tok_sn, mdl_sn = load_token_clf("WesScivetti/SNACS_Multilingual")
-    results2 = tokens_with_distributions(tok_sn, mdl_sn, text)
-    print(results2, file=sys.stderr)
-    sorted_results2 = sorted(results2, key=lambda x: x["start"])
+    #tok_sn, mdl_sn = load_token_clf("WesScivetti/SNACS_Multilingual")
+    #results2 = tokens_with_distributions(tok_sn, mdl_sn, text)
+    #print(results2, file=sys.stderr)
+    #sorted_results2 = sorted(results2, key=lambda x: x["start"])
 
     token_classifier = pipeline("token-classification", model="WesScivetti/SNACS_Multilingual",
-                                aggregation_strategy="simple")
+                                aggregation_strategy="none")
 
 
 
@@ -300,9 +300,9 @@ def classify_tokens(text):
         last_idx = end
     output += html.escape(text[last_idx:])
 
-    for entity in sorted_results2:
-        start = entity["start"]
-        end = entity["end"]
+    # for entity in sorted_results2:
+    #     start = entity["start"]
+    #     end = entity["end"]
         # label = entity["top_label"]
         # score = entity["top_score"]
         # dist = entity["probs"]
@@ -319,7 +319,7 @@ def classify_tokens(text):
         # )
         #
         # last_idx = end
-    output += html.escape(text[last_idx:])
+    #output += html.escape(text[last_idx:])
 
     table = [
         [entity["word"], entity["entity_group"], f"{entity['score']:.2f}"]
