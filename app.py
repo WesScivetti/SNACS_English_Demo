@@ -12,73 +12,72 @@ import torch
 
 @spaces.GPU  # <-- required for ZeroGPU
 def classify_tokens(text):
-
-
-    def load_token_clf(model_name_or_path, device=None):
-        tok = AutoTokenizer.from_pretrained(model_name_or_path)
-        mdl = AutoModelForTokenClassification.from_pretrained(model_name_or_path)
-        if device is None:
-            device = 0 if torch.cuda.is_available() else -1
-        if device >= 0:
-            mdl = mdl.to(device)
-        return tok, mdl
-
-    @torch.no_grad()
-    def tokens_with_distributions(tokenizer, model, text, *, truncation=True):
-        """
-        Returns a list of dicts, one per *subword token* (special tokens excluded):
-          {
-            'token': str,              # the tokenizer piece (e.g., '▁Montréal' or '##n')
-            'text': str,               # exact substring from the original text
-            'start': int, 'end': int,  # char offsets into `text`
-            'probs': {label: float, ...},   # full distribution over all labels
-            'top_label': str,          # argmax label (convenience)
-            'top_score': float         # argmax prob (convenience)
-          }
-        """
-        enc = tokenizer(
-            text,
-            return_tensors="pt",
-            return_offsets_mapping=True,
-            truncation=truncation
-        )
-        offset_mapping = enc.pop("offset_mapping")[0]  # (seq_len, 2)
-        input_ids = enc["input_ids"][0]
-        # Move tensors to model device
-        enc = {k: v.to(model.device) for k, v in enc.items()}
-
-        logits = model(**enc).logits[0]  # (seq_len, num_labels)
-        probs = torch.softmax(logits, dim=-1)
-
-        id2label = model.config.id2label
-        # Ensure indexable by int
-        if isinstance(id2label, dict):
-            id2label = {int(k): v for k, v in id2label.items()}
-
-        out = []
-        for i, (start, end) in enumerate(offset_mapping.tolist()):
-            # Skip special tokens that have (0, 0) or otherwise map to no chars
-            if start == end:
-                continue
-
-            token_str = tokenizer.convert_ids_to_tokens(int(input_ids[i]))
-            # Full distribution over original labels (e.g., B-PER/I-PER/O …)
-            dist = {id2label[j]: float(probs[i, j]) for j in range(probs.shape[-1])}
-            # Argmax for convenience
-            top_j = int(torch.argmax(probs[i]).item())
-            top_label = id2label[top_j]
-            top_score = float(probs[i, top_j])
-
-            out.append({
-                "token": token_str,
-                "text": text[start:end],
-                "start": start,
-                "end": end,
-                "probs": dist,
-                "top_label": top_label,
-                "top_score": top_score,
-            })
-        return out
+    #
+    # def load_token_clf(model_name_or_path, device=None):
+    #     tok = AutoTokenizer.from_pretrained(model_name_or_path)
+    #     mdl = AutoModelForTokenClassification.from_pretrained(model_name_or_path)
+    #     if device is None:
+    #         device = 0 if torch.cuda.is_available() else -1
+    #     if device >= 0:
+    #         mdl = mdl.to(device)
+    #     return tok, mdl
+    #
+    # @torch.no_grad()
+    # def tokens_with_distributions(tokenizer, model, text, *, truncation=True):
+    #     """
+    #     Returns a list of dicts, one per *subword token* (special tokens excluded):
+    #       {
+    #         'token': str,              # the tokenizer piece (e.g., '▁Montréal' or '##n')
+    #         'text': str,               # exact substring from the original text
+    #         'start': int, 'end': int,  # char offsets into `text`
+    #         'probs': {label: float, ...},   # full distribution over all labels
+    #         'top_label': str,          # argmax label (convenience)
+    #         'top_score': float         # argmax prob (convenience)
+    #       }
+    #     """
+    #     enc = tokenizer(
+    #         text,
+    #         return_tensors="pt",
+    #         return_offsets_mapping=True,
+    #         truncation=truncation
+    #     )
+    #     offset_mapping = enc.pop("offset_mapping")[0]  # (seq_len, 2)
+    #     input_ids = enc["input_ids"][0]
+    #     # Move tensors to model device
+    #     enc = {k: v.to(model.device) for k, v in enc.items()}
+    #
+    #     logits = model(**enc).logits[0]  # (seq_len, num_labels)
+    #     probs = torch.softmax(logits, dim=-1)
+    #
+    #     id2label = model.config.id2label
+    #     # Ensure indexable by int
+    #     if isinstance(id2label, dict):
+    #         id2label = {int(k): v for k, v in id2label.items()}
+    #
+    #     out = []
+    #     for i, (start, end) in enumerate(offset_mapping.tolist()):
+    #         # Skip special tokens that have (0, 0) or otherwise map to no chars
+    #         if start == end:
+    #             continue
+    #
+    #         token_str = tokenizer.convert_ids_to_tokens(int(input_ids[i]))
+    #         # Full distribution over original labels (e.g., B-PER/I-PER/O …)
+    #         dist = {id2label[j]: float(probs[i, j]) for j in range(probs.shape[-1])}
+    #         # Argmax for convenience
+    #         top_j = int(torch.argmax(probs[i]).item())
+    #         top_label = id2label[top_j]
+    #         top_score = float(probs[i, top_j])
+    #
+    #         out.append({
+    #             "token": token_str,
+    #             "text": text[start:end],
+    #             "start": start,
+    #             "end": end,
+    #             "probs": dist,
+    #             "top_label": top_label,
+    #             "top_score": top_score,
+    #         })
+    #     return out
 
     color_dict = {'None': '#6adf97',
               'O': '#f18621',
@@ -270,7 +269,7 @@ def classify_tokens(text):
     #sorted_results2 = sorted(results2, key=lambda x: x["start"])
 
     token_classifier = pipeline("token-classification", model="WesScivetti/SNACS_Multilingual",
-                                aggregation_strategy="none")
+                                aggregation_strategy="simple")
 
 
 
