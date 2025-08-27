@@ -1,17 +1,37 @@
 import html
+from collections import defaultdict
+
 import gradio as gr
 import spaces
 from transformers import pipeline
 
 
-
-# Load the pipeline (token classification)
-#token_classifier = pipeline("token-classification", model="WesScivetti/SNACS_English", aggregation_strategy="simple")
+# --- Helper: small CSS for nice tooltips on hover ---
+HOVER_CSS = """
+<style>
+.hover-sentence { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; line-height: 1.8; }
+.tok { position: relative; display: inline-block; }
+.tok .tip {
+  display: none; position: absolute; left: 0; top: 100%; margin-top: 6px;
+  background: #fff; border: 1px solid #d0d7de; border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.15); z-index: 9999;
+  max-height: 360px; overflow: auto; min-width: 320px; padding: 10px 12px;
+  white-space: normal;
+}
+.tok:hover .tip { display: block; }
+.tip h4 { margin: 0 0 6px 0; font-size: 13px; font-weight: 700; color: #111827; }
+.tip .row { display: grid; grid-template-columns: 1fr auto 120px; align-items: center; gap: 10px; font-size: 12px; padding: 3px 0; }
+.tip .lbl { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+.tip .pct { font-variant-numeric: tabular-nums; }
+.tip .bar { height: 6px; background: #eef2f7; border-radius: 4px; position: relative; }
+.tip .bar > span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
+</style>
+"""
 
 
 @spaces.GPU  # <-- required for ZeroGPU
-def classify_tokens(text):
-
+def classify_tokens(text: str):
+    # --- Your original color palette (unchanged) ---
     color_dict = {'None': '#6adf97',
               'O': '#f18621',
               'p.Purpose-p.Purpose': '#3cb44b',
@@ -195,68 +215,167 @@ def classify_tokens(text):
               'p.Whole-p.Circumstance': '#c70411',
               'p.Purpose-p.Goal': '#f2f199'}
 
-    token_classifier = pipeline("token-classification", model="WesScivetti/SNACS_Multilingual",
-                                aggregation_strategy="simple")
+    # --- Build pipeline (inside function so it runs on GPU via ZeroGPU) ---
+    token_classifier = pipeline(
+        "token-classification",
+        model="WesScivetti/SNACS_Multilingual",
+        aggregation_strategy="simple"
+    )
 
-    results = token_classifier(text)
+    # 1) Aggregated results for top label + spans (for coloring & table)
+    agg = token_classifier(text)
+    agg_sorted = sorted(agg, key=lambda x: x["start"])
 
-    sorted_results = sorted(results, key=lambda x: x["start"])
-    output = ""
+    # 2) Try to get full distributions aligned to words
+    dists_per_word = []
+    try:
+        # Preferred path: return_all_scores with aggregation
+        agg_with_scores = token_classifier(text, return_all_scores=True)
+        # Expect: each item has 'scores' with list of {entity_group, score}
+        for item in agg_with_scores:
+            scores_map = {}
+            # Some transformers versions use 'entity_group', others 'entity'
+            for sc in item.get("scores", []):
+                raw_label = sc.get("entity_group") or sc.get("entity")
+                if raw_label is None:
+                    continue
+                # Normalize B-/I- prefixes if present
+                if raw_label.startswith("B-") or raw_label.startswith("I-"):
+                    raw_label = raw_label.split("-", 1)[1]
+                scores_map[raw_label] = float(sc["score"])
+            # Normalize to sum=1 (some versions already do; this is safe)
+            total = sum(scores_map.values()) or 1.0
+            for k in list(scores_map.keys()):
+                scores_map[k] = scores_map[k] / total
+            dists_per_word.append({
+                "start": item["start"], "end": item["end"], "word": item["word"],
+                "scores": scores_map
+            })
+    except Exception:
+        # Fallback: compute distributions by averaging sub-token probabilities
+        raw_tc = pipeline(
+            "token-classification",
+            model=token_classifier.model,
+            tokenizer=token_classifier.tokenizer,
+            aggregation_strategy=None
+        )
+        raw = raw_tc(text, return_all_scores=True)
+        # Group sub-tokens into aggregated spans
+        for span in agg_sorted:
+            s0, s1 = span["start"], span["end"]
+            buckets = [t for t in raw if t["start"] >= s0 and t["end"] <= s1]
+            scores_sum = defaultdict(float)
+            count = 0
+            for t in buckets:
+                for sc in t.get("scores", []):
+                    raw_label = sc.get("entity_group") or sc.get("entity")
+                    if raw_label is None:
+                        continue
+                    if raw_label.startswith("B-") or raw_label.startswith("I-"):
+                        raw_label = raw_label.split("-", 1)[1]
+                    scores_sum[raw_label] += float(sc["score"])
+                count += 1
+            if count == 0:
+                # No subtokens? fall back to top label only
+                scores_map = {span["entity_group"]: 1.0}
+            else:
+                # Average over subtokens, then normalize
+                for k in list(scores_sum.keys()):
+                    scores_sum[k] = scores_sum[k] / count
+                total = sum(scores_sum.values()) or 1.0
+                scores_map = {k: v / total for k, v in scores_sum.items()}
+            dists_per_word.append({
+                "start": s0, "end": s1, "word": span["word"], "scores": scores_map
+            })
+
+    # --- Output 1: your original tagged sentence (kept) ---
+    output_html = ""
     last_idx = 0
-
-    for entity in sorted_results:
-        start = entity["start"]
-        end = entity["end"]
-        label = entity["entity_group"]
-        score = entity["score"]
+    for ent in agg_sorted:
+        start, end = ent["start"], ent["end"]
+        label, score = ent["entity_group"], ent["score"]
         word = html.escape(text[start:end])
-        output += html.escape(text[last_idx:start])
-
+        output_html += html.escape(text[last_idx:start])
         color = color_dict.get(label, "#D3D3D3")
         tooltip = f"{label} ({score:.2f})"
         word_with_label = f"{word}_{label}"
-
-        output += (
-            f"<span style='background-color: {color}; padding: 2px; border-radius: 4px;' "
+        output_html += (
+            f"<span style='background-color:{color}; padding:2px; border-radius:4px;' "
             f"title='{tooltip}'>{word_with_label}</span>"
         )
-
         last_idx = end
-    output += html.escape(text[last_idx:])
+    output_html += html.escape(text[last_idx:])
+    styled_html = f"<div style='font-family: sans-serif; line-height:1.6;'>{output_html}</div>"
 
-
-    table = [
-        [entity["word"], entity["entity_group"], f"{entity['score']:.2f}"]
-        for entity in sorted_results
-    ]
-
-    # Return both: HTML and table
-    styled_html = f"<div style='font-family: sans-serif; line-height: 1.6;'>{output}</div>"
-
-    # Generate a colored HTML table
+    # --- Output 2: your original colored table (kept) ---
     table_html = "<table style='border-collapse: collapse; font-family: sans-serif;'>"
-    table_html += "<tr><th style='border: 1px solid #ccc; padding: 6px;'>Token</th>"
-    table_html += "<th style='border: 1px solid #ccc; padding: 6px;'>SNACS Label</th>"
-    table_html += "<th style='border: 1px solid #ccc; padding: 6px;'>Confidence</th></tr>"
-
-    for entity in sorted_results:
-        token = html.escape(entity["word"])
-        label = entity["entity_group"]
-        score = f"{entity['score']:.2f}"
+    table_html += "<tr><th style='border:1px solid #ccc; padding:6px;'>Token</th>"
+    table_html += "<th style='border:1px solid #ccc; padding:6px;'>SNACS Label</th>"
+    table_html += "<th style='border:1px solid #ccc; padding:6px;'>Confidence</th></tr>"
+    for ent in agg_sorted:
+        token = html.escape(ent["word"])
+        label = ent["entity_group"]
+        score = f"{ent['score']:.2f}"
         color = color_dict.get(label, "#D3D3D3")
-
         table_html += "<tr>"
-        table_html += (
-            f"<td style='border: 1px solid #ccc; padding: 6px; background-color: {color};'>{token}</td>"
-        )
-        table_html += (
-            f"<td style='border: 1px solid #ccc; padding: 6px; background-color: {color};'>{label}</td>"
-        )
-        table_html += f"<td style='border: 1px solid #ccc; padding: 6px;'>{score}</td>"
+        table_html += f"<td style='border:1px solid #ccc; padding:6px; background-color:{color};'>{token}</td>"
+        table_html += f"<td style='border:1px solid #ccc; padding:6px; background-color:{color};'>{label}</td>"
+        table_html += f"<td style='border:1px solid #ccc; padding:6px;'>{score}</td>"
         table_html += "</tr>"
     table_html += "</table>"
 
-    return styled_html, table_html
+    # --- Output 3: NEW hoverable full-sentence with per-token distributions ---
+    # Build a quick index from span (start,end) -> scores map
+    span_to_scores = {}
+    for d in dists_per_word:
+        span_to_scores[(d["start"], d["end"])] = d["scores"]
+
+    hover_parts = [HOVER_CSS, "<div class='hover-sentence'>"]
+    last_idx = 0
+    for ent in agg_sorted:
+        s, e = ent["start"], ent["end"]
+        label = ent["entity_group"]
+        word = html.escape(text[s:e])
+        color = color_dict.get(label, "#D3D3D3")
+        hover_parts.append(html.escape(text[last_idx:s]))  # inter-token text
+
+        # Prepare tooltip content (all labels, sorted by prob desc)
+        scores_map = span_to_scores.get((s, e), {label: 1.0})
+        sorted_labels = sorted(scores_map.items(), key=lambda kv: kv[1], reverse=True)
+
+        # Build the tooltip body
+        tip_rows = []
+        for lbl, prob in sorted_labels:
+            lbl_esc = html.escape(lbl)
+            pct = f"{prob * 100:.1f}%"
+            bar_w = f"{prob * 100:.1f}%"
+            bar_color = color_dict.get(lbl, "#9ca3af")
+            tip_rows.append(
+                f"<div class='row'>"
+                f"<div class='lbl' style='color:{bar_color}'>{lbl_esc}</div>"
+                f"<div class='pct'>{pct}</div>"
+                f"<div class='bar'><span style='background:{bar_color}; width:{bar_w};'></span></div>"
+                f"</div>"
+            )
+        tip_html = (
+            f"<div class='tip'>"
+            f"<h4>Label probabilities</h4>"
+            + "".join(tip_rows) +
+            f"</div>"
+        )
+
+        # Visible token span (colored by top label)
+        hover_parts.append(
+            f"<span class='tok' "
+            f"style='background:{color}; padding:2px 3px; border-radius:4px;'>"
+            f"{word}{tip_html}</span>"
+        )
+        last_idx = e
+    hover_parts.append(html.escape(text[last_idx:]))
+    hover_parts.append("</div>")
+    hover_html = "".join(hover_parts)
+
+    return styled_html, table_html, hover_html
 
 
 iface = gr.Interface(
@@ -264,11 +383,15 @@ iface = gr.Interface(
     inputs=gr.Textbox(lines=4, placeholder="Enter a sentence...", label="Input Text"),
     outputs=[
         gr.HTML(label="SNACS Tagged Sentence"),
-        gr.HTML(label="SNACS Table with Colored Labels")
+        gr.HTML(label="SNACS Table with Colored Labels"),
+        gr.HTML(label="Hover sentence: per-token label distribution"),  # NEW
     ],
     title="SNACS Classification",
-    description="SNACS Classification. Now Multilingual! See the <a href='https://arxiv.org/abs/1704.02134'>SNACS guidelines</a> for details.",
-    theme="default"
+    description=(
+        "SNACS Classification. Now Multilingual! "
+        "See the <a href='https://arxiv.org/abs/1704.02134'>SNACS guidelines</a> for details."
+    ),
+    theme="default",
 )
 
 iface.launch()
