@@ -215,78 +215,49 @@ def classify_tokens(text: str):
               'p.Whole-p.Circumstance': '#c70411',
               'p.Purpose-p.Goal': '#f2f199'}
 
-    # --- Build pipeline (inside function so it runs on GPU via ZeroGPU) ---
+    # Build pipeline (inside the GPU-decorated function)
     token_classifier = pipeline(
         "token-classification",
         model="WesScivetti/SNACS_Multilingual",
-        aggregation_strategy="simple"
+        aggregation_strategy="simple",
+        device=0 if torch.cuda.is_available() else -1
     )
 
     # 1) Aggregated results for top label + spans (for coloring & table)
     agg = token_classifier(text)
     agg_sorted = sorted(agg, key=lambda x: x["start"])
 
-    # 2) Try to get full distributions aligned to words
-    dists_per_word = []
-    try:
-        # Preferred path: return_all_scores with aggregation
-        agg_with_scores = token_classifier(text, return_all_scores=True)
-        # Expect: each item has 'scores' with list of {entity_group, score}
-        for item in agg_with_scores:
-            scores_map = {}
-            # Some transformers versions use 'entity_group', others 'entity'
-            for sc in item.get("scores", []):
-                raw_label = sc.get("entity_group") or sc.get("entity")
-                if raw_label is None:
-                    continue
-                # Normalize B-/I- prefixes if present
-                if raw_label.startswith("B-") or raw_label.startswith("I-"):
-                    raw_label = raw_label.split("-", 1)[1]
-                scores_map[raw_label] = float(sc["score"])
-            # Normalize to sum=1 (some versions already do; this is safe)
-            total = sum(scores_map.values()) or 1.0
-            for k in list(scores_map.keys()):
-                scores_map[k] = scores_map[k] / total
-            dists_per_word.append({
-                "start": item["start"], "end": item["end"], "word": item["word"],
-                "scores": scores_map
-            })
-    except Exception:
-        # Fallback: compute distributions by averaging sub-token probabilities
-        raw_tc = pipeline(
-            "token-classification",
-            model=token_classifier.model,
-            tokenizer=token_classifier.tokenizer,
-            aggregation_strategy=None
-        )
-        raw = raw_tc(text, return_all_scores=True)
-        # Group sub-tokens into aggregated spans
-        for span in agg_sorted:
-            s0, s1 = span["start"], span["end"]
-            buckets = [t for t in raw if t["start"] >= s0 and t["end"] <= s1]
-            scores_sum = defaultdict(float)
-            count = 0
-            for t in buckets:
-                for sc in t.get("scores", []):
-                    raw_label = sc.get("entity_group") or sc.get("entity")
-                    if raw_label is None:
-                        continue
-                    if raw_label.startswith("B-") or raw_label.startswith("I-"):
-                        raw_label = raw_label.split("-", 1)[1]
-                    scores_sum[raw_label] += float(sc["score"])
-                count += 1
-            if count == 0:
-                # No subtokens? fall back to top label only
-                scores_map = {span["entity_group"]: 1.0}
-            else:
-                # Average over subtokens, then normalize
-                for k in list(scores_sum.keys()):
-                    scores_sum[k] = scores_sum[k] / count
-                total = sum(scores_sum.values()) or 1.0
-                scores_map = {k: v / total for k, v in scores_sum.items()}
-            dists_per_word.append({
-                "start": s0, "end": s1, "word": span["word"], "scores": scores_map
-            })
+    # 2) Compute full label distributions from model logits (no return_all_scores)
+    tok = token_classifier.tokenizer
+    model = token_classifier.model
+    if torch.cuda.is_available():
+        model = model.to("cuda")
+
+    enc = tok(
+        text,
+        return_offsets_mapping=True,
+        return_tensors="pt",
+        truncation=True
+    )
+    offsets = enc["offset_mapping"][0].tolist()  # list of (start,end) per token
+    # move tensors to device (except offset_mapping which stays on CPU)
+    model_inputs = {k: v.to(model.device) for k, v in enc.items() if k != "offset_mapping"}
+
+    with torch.no_grad():
+        logits = model(**model_inputs).logits  # [1, seq_len, num_labels]
+        probs = torch.softmax(logits, dim=-1)[0]  # [seq_len, num_labels]
+
+    id2label = model.config.id2label
+    num_labels = probs.shape[-1]
+
+    def span_distribution(s, e):
+        # pick token indices whose offset overlaps span [s, e)
+        idxs = [i for i, (a, b) in enumerate(offsets) if max(a, s) < min(b, e) and b > a]
+        if not idxs:
+            return None  # whitespace/punct without token coverage
+        p = probs[idxs].mean(dim=0)  # average over subtokens
+        p = (p / (p.sum() + 1e-12)).tolist()
+        return {id2label[j]: float(p[j]) for j in range(num_labels)}
 
     # --- Output 1: your original tagged sentence (kept) ---
     output_html = ""
@@ -324,12 +295,7 @@ def classify_tokens(text: str):
         table_html += "</tr>"
     table_html += "</table>"
 
-    # --- Output 3: NEW hoverable full-sentence with per-token distributions ---
-    # Build a quick index from span (start,end) -> scores map
-    span_to_scores = {}
-    for d in dists_per_word:
-        span_to_scores[(d["start"], d["end"])] = d["scores"]
-
+    # --- Output 3: hoverable full sentence with per-token distributions ---
     hover_parts = [HOVER_CSS, "<div class='hover-sentence'>"]
     last_idx = 0
     for ent in agg_sorted:
@@ -339,11 +305,10 @@ def classify_tokens(text: str):
         color = color_dict.get(label, "#D3D3D3")
         hover_parts.append(html.escape(text[last_idx:s]))  # inter-token text
 
-        # Prepare tooltip content (all labels, sorted by prob desc)
-        scores_map = span_to_scores.get((s, e), {label: 1.0})
-        sorted_labels = sorted(scores_map.items(), key=lambda kv: kv[1], reverse=True)
+        scores_map = span_distribution(s, e) or {label: 1.0}
+        # sort labels by prob desc; cap to top-12 for compact tooltip
+        sorted_labels = sorted(scores_map.items(), key=lambda kv: kv[1], reverse=True)[:12]
 
-        # Build the tooltip body
         tip_rows = []
         for lbl, prob in sorted_labels:
             lbl_esc = html.escape(lbl)
@@ -357,23 +322,21 @@ def classify_tokens(text: str):
                 f"<div class='bar'><span style='background:{bar_color}; width:{bar_w};'></span></div>"
                 f"</div>"
             )
-        tip_html = (
-            f"<div class='tip'>"
-            f"<h4>Label probabilities</h4>"
-            + "".join(tip_rows) +
-            f"</div>"
-        )
+        tip_html = f"<div class='tip'><h4>Label probabilities</h4>{''.join(tip_rows)}</div>"
 
-        # Visible token span (colored by top label)
         hover_parts.append(
-            f"<span class='tok' "
-            f"style='background:{color}; padding:2px 3px; border-radius:4px;'>"
+            f"<span class='tok' style='background:{color}; padding:2px 3px; border-radius:4px;'>"
             f"{word}{tip_html}</span>"
         )
         last_idx = e
     hover_parts.append(html.escape(text[last_idx:]))
     hover_parts.append("</div>")
     hover_html = "".join(hover_parts)
+
+    # Clean up GPU memory sooner (optional)
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
 
     return styled_html, table_html, hover_html
 
@@ -384,7 +347,7 @@ iface = gr.Interface(
     outputs=[
         gr.HTML(label="SNACS Tagged Sentence"),
         gr.HTML(label="SNACS Table with Colored Labels"),
-        gr.HTML(label="Hover sentence: per-token label distribution"),  # NEW
+        gr.HTML(label="Hover sentence: per-token label distribution"),
     ],
     title="SNACS Classification",
     description=(
