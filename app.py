@@ -359,7 +359,7 @@ def classify_tokens(text: str):
 
         # ---- run twice with different aggregation strategies ----
         results_simple = pipe(text, aggregation_strategy="simple")  # output #1
-        results_none = pipe(text, aggregation_strategy="none")  # output #2 (per-token + probabilities)
+        results_none = pipe(text, aggregation_strategy="none", ignore_labels=[])  # output #2 (per-token + probabilities)
         print(results_none)
         # ---------------------------------------------------------
 
