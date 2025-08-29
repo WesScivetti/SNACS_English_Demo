@@ -433,7 +433,7 @@ def classify_tokens(text: str):
 
         styled_html1 = f"<div style='font-family:sans-serif;line-height:1.6;'>{output1}</div>"
         styled_html2 = f"<div style='font-family:sans-serif;line-height:1.6;'>{output2}</div>"
-        return styled_html1, styled_html2, table_html
+        return styled_html1, table_html, styled_html2
     except Exception as e:
         # Force the real error into the Space logs
         import traceback, sys
@@ -446,8 +446,8 @@ iface = gr.Interface(
     inputs=gr.Textbox(lines=4, placeholder="Enter a sentence...", label="Input Text"),
     outputs=[
         gr.HTML(label="SNACS Tagged Sentence"),
-        gr.HTML(label="SNACS Tagged Sentence with No Label Aggregation"),
-        gr.HTML(label="SNACS Table with Colored Labels")
+        gr.HTML(label="SNACS Table with Colored Labels"),
+        gr.HTML(label="SNACS Tagged Sentence with No Label Aggregation")
     ],
     title="SNACS Classification",
     description="SNACS Classification. Now Multilingual! See the <a href='https://arxiv.org/abs/1704.02134'>SNACS guidelines</a> for details.",
