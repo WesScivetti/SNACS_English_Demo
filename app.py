@@ -1,12 +1,215 @@
 import html
 import gradio as gr
 import spaces
-from transformers import pipeline, AutoTokenizer, AutoModelForTokenClassification
+from transformers import pipeline, AutoTokenizer, AutoModelForTokenClassification, TokenClassificationPipeline
 import torch
+import numpy as np
 
 
 # Load the pipeline (token classification)
 # token_classifier = pipeline("token-classification", model="WesScivetti/SNACS_English", aggregation_strategy="simple")
+
+@spaces.GPU  # <-- required for ZeroGPU
+def softmax(outputs):
+    maxes = np.max(outputs, axis=-1, keepdims=True)
+    shifted_exp = np.exp(outputs - maxes)
+    return shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
+
+@spaces.GPU  # <-- required for ZeroGPU
+class MyPipeline(TokenClassificationPipeline):
+    def postprocess(self, all_outputs, aggregation_strategy="none", ignore_labels=None):
+        if ignore_labels is None:
+            ignore_labels = ["O"]
+
+        # Convenience
+        id2label = self.model.config.id2label
+        # Ensure deterministic ordering of labels in the probabilities dict
+        label_ids_sorted = sorted(id2label.keys())
+        labels_sorted = [id2label[i] for i in label_ids_sorted]
+
+        def softmax(logits):
+            maxes = np.max(logits, axis=-1, keepdims=True)
+            shifted = logits - maxes
+            exp = np.exp(shifted)
+            return exp / exp.sum(axis=-1, keepdims=True)
+
+        # We'll keep ALL pre_entities from all chunks to compute probabilities for grouped spans later.
+        all_pre_entities = []
+        all_grouped_entities = []
+
+        # Get map from the first output, it's the same for all chunks
+        word_to_chars_map = all_outputs[0].get("word_to_chars_map")
+        sentence = all_outputs[0]["sentence"]
+
+        for model_outputs in all_outputs:
+            # logits -> scores (probabilities per class)
+            if self.framework == "pt" and model_outputs["logits"][0].dtype in (torch.bfloat16, torch.float16):
+                logits = model_outputs["logits"][0].to(torch.float32).numpy()
+            else:
+                logits = model_outputs["logits"][0].numpy()
+
+            scores = softmax(logits)
+
+            input_ids = model_outputs["input_ids"][0]
+            offset_mapping = (
+                model_outputs["offset_mapping"][0] if model_outputs["offset_mapping"] is not None else None
+            )
+            special_tokens_mask = model_outputs["special_tokens_mask"][0].numpy()
+            word_ids = model_outputs.get("word_ids")
+
+            if self.framework == "tf":
+                input_ids = input_ids.numpy()
+                offset_mapping = offset_mapping.numpy() if offset_mapping is not None else None
+
+            # Build pre-entities (per token), preserving per-class distributions
+            pre_entities = self.gather_pre_entities(
+                sentence,
+                input_ids,
+                scores,
+                offset_mapping,
+                special_tokens_mask,
+                aggregation_strategy,
+                word_ids=word_ids,
+                word_to_chars_map=word_to_chars_map,
+            )
+
+            # Aggregate into entities according to the chosen strategy
+            grouped_entities = self.aggregate(pre_entities, aggregation_strategy)
+
+            # Filter ignore labels
+            grouped_entities = [
+                e for e in grouped_entities
+                if e.get("entity", None) not in ignore_labels
+                   and e.get("entity_group", None) not in ignore_labels
+            ]
+
+            all_pre_entities.extend(pre_entities)
+            all_grouped_entities.extend(grouped_entities)
+
+        # If there were multiple chunks, reconcile overlapping entities as before.
+        num_chunks = len(all_outputs)
+        if num_chunks > 1:
+            all_grouped_entities = self.aggregate_overlapping_entities(all_grouped_entities)
+
+        # ---- Attach probabilities to each entity ----
+        #
+        # Strategy:
+        #  - For token-level outputs (aggregation_strategy == NONE): we can map directly by token index.
+        #  - For span/grouped outputs (SIMPLE/FIRST/MAX/AVERAGE): average the per-class distributions of the
+        #    tokens that overlap the entity's [start, end), and (when possible) whose argmax tag matches the
+        #    entity tag. If offsets are unavailable, we fallback to "best effort" using the entity word length.
+        #
+
+        def token_pred_label_id(token_scores: np.ndarray) -> int:
+            return int(token_scores.argmax())
+
+        def label_from_entity_dict(ent: dict) -> str:
+            # entity_group for grouped results, entity for NONE
+            if "entity_group" in ent and ent["entity_group"] is not None:
+                return ent["entity_group"]
+            if "entity" in ent and ent["entity"] is not None:
+                # Strip B-/I- for comparison purposes
+                tag = ent["entity"]
+                if tag.startswith("B-") or tag.startswith("I-"):
+                    return tag[2:]
+                return tag
+            return None
+
+        def spans_overlap(a_start, a_end, b_start, b_end):
+            if a_start is None or a_end is None or b_start is None or b_end is None:
+                return False
+            return max(a_start, b_start) < min(a_end, b_end)
+
+        # Precompute convenience arrays from pre_entities
+        pre_tokens = []
+        for pe in all_pre_entities:
+            # Each pre-entity has: word, scores (np.array), start, end, index, is_subword
+            pre_tokens.append({
+                "start": pe.get("start"),
+                "end": pe.get("end"),
+                "index": pe.get("index"),
+                "scores": pe.get("scores"),
+                "pred_id": token_pred_label_id(pe.get("scores")),
+                "pred_label": id2label[token_pred_label_id(pe.get("scores"))]
+            })
+
+        def average_probs(token_list):
+            if not token_list:
+                return None
+            arr = np.stack([t["scores"] for t in token_list], axis=0)  # (T, C)
+            avg = np.nanmean(arr, axis=0)
+            # Ensure numeric stability (already normalized but just in case)
+            s = float(avg.sum())
+            if s > 0:
+                avg = avg / s
+            return avg
+
+        results_with_probs = []
+        for ent in all_grouped_entities:
+            ent_start = ent.get("start")
+            ent_end = ent.get("end")
+            ent_tag = label_from_entity_dict(ent)
+
+            candidate_tokens = []
+
+            if aggregation_strategy == "none":
+                # Token-level; match by index
+                idx = ent.get("index")
+                if idx is not None:
+                    for t in pre_tokens:
+                        if t["index"] == idx:
+                            candidate_tokens = [t]
+                            break
+            else:
+                # Span-level; collect tokens that overlap the span
+                overlapping = [t for t in pre_tokens if spans_overlap(ent_start, ent_end, t["start"], t["end"])]
+                if ent_tag is not None:
+                    # Match tag ignoring B-/I- prefixes on token labels
+                    def strip_bi(lbl):
+                        return lbl[2:] if lbl.startswith("B-") or lbl.startswith("I-") else lbl
+
+                    overlapping = [t for t in overlapping if strip_bi(t["pred_label"]) == ent_tag]
+                candidate_tokens = overlapping
+
+            avg = average_probs(candidate_tokens)
+
+            if avg is None:
+                # Fallback: if we somehow couldn't compute, create a degenerate distribution
+                # focusing on the predicted class in the entity
+                probs_vec = np.zeros((len(labels_sorted),), dtype=float)
+                # Try to infer entity's class index
+                if "entity" in ent and ent["entity"] is not None:
+                    ent_label = ent["entity"]
+                elif "entity_group" in ent and ent["entity_group"] is not None:
+                    ent_label = ent["entity_group"]
+                else:
+                    ent_label = None
+
+                # Strip B-/I- if present
+                if ent_label is not None and (ent_label.startswith("B-") or ent_label.startswith("I-")):
+                    ent_label = ent_label[2:]
+
+                # Find first matching label id (allow both "B-"/"I-" and plain)
+                chosen_i = None
+                for i, lab in enumerate(labels_sorted):
+                    base = lab[2:] if lab.startswith(("B-", "I-")) else lab
+                    if ent_label == base:
+                        chosen_i = i
+                        break
+                if chosen_i is None:
+                    chosen_i = 0
+                probs_vec[chosen_i] = 1.0
+            else:
+                # avg is class-ordered by model's original id order; map to labels_sorted
+                # Build a lookup from original id -> position in labels_sorted
+                # (labels_sorted was built in id order, so this is already aligned)
+                probs_vec = avg
+
+            # Attach probabilities as a readable dict
+            ent["probabilities"] = {labels_sorted[i]: float(probs_vec[i]) for i in range(len(labels_sorted))}
+            results_with_probs.append(ent)
+
+        return results_with_probs
 
 
 @spaces.GPU  # <-- required for ZeroGPU
@@ -271,7 +474,7 @@ def classify_tokens(text):
                                 aggregation_strategy="simple")
 
     token_classifier2 = pipeline("token-classification", model="WesScivetti/SNACS_Multilingual",
-                                 aggregation_strategy="none", ignore_labels=[])
+                                 pipeline_class=MyPipeline)
 
     results = token_classifier(text)
     results2 = token_classifier2(text)
@@ -311,11 +514,12 @@ def classify_tokens(text):
         end = entity["end"]
         label = entity["entity"]
         score = entity["score"]
+        probabilities = entity["probabilities"]
         word = html.escape(text[start:end])
         output2 += html.escape(text[last_idx:start])
 
         color = color_dict.get(label, "#D3D3D3")
-        tooltip = f"{label} ({score:.2f})"
+        tooltip = f"{label} ({probabilities:.2f})"
         word_with_label = f"{word}_{label}"
 
         output2 += (
@@ -382,17 +586,17 @@ def classify_tokens(text):
 
     return styled_html, styled_html2, table_html
 
-iface = gr.Interface(
-    fn=classify_tokens,
-    inputs=gr.Textbox(lines=4, placeholder="Enter a sentence...", label="Input Text"),
-    outputs=[
-        gr.HTML(label="SNACS Tagged Sentence"),
-        gr.HTML(label="SNACS Tagged Sentence with No Label Aggregation"),
-        gr.HTML(label="SNACS Table with Colored Labels")
-    ],
-    title="SNACS Classification",
-    description="SNACS Classification. Now Multilingual! See the <a href='https://arxiv.org/abs/1704.02134'>SNACS guidelines</a> for details.",
-    theme="default"
-)
+# iface = gr.Interface(
+#     fn=classify_tokens,
+#     inputs=gr.Textbox(lines=4, placeholder="Enter a sentence...", label="Input Text"),
+#     outputs=[
+#         gr.HTML(label="SNACS Tagged Sentence"),
+#          gr.HTML(label="SNACS Tagged Sentence with No Label Aggregation"),
+#         gr.HTML(label="SNACS Table with Colored Labels")
+#     ],
+#     title="SNACS Classification",
+#     description="SNACS Classification. Now Multilingual! See the <a href='https://arxiv.org/abs/1704.02134'>SNACS guidelines</a> for details.",
+#     theme="default"
+# )
 
-iface.launch()
+# iface.launch()
