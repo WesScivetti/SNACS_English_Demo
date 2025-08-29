@@ -1,5 +1,7 @@
-transformers==4.52.3
-torch
-gradio
-spaces
-numpy
+transformers>=4.39
+torch>=2.1
+gradio>=4.30
+spaces>=0.10
+huggingface_hub>=0.22
+numpy>=1.24
+accelerate>=0.28
