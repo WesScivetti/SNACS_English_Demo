@@ -1,6 +1,6 @@
 import html
 import gradio as gr
-# import spaces
+import spaces
 from transformers import pipeline, AutoTokenizer, AutoModelForTokenClassification
 import torch
 
