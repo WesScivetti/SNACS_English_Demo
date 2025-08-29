@@ -349,97 +349,91 @@ def classify_tokens(text: str):
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         model = AutoModelForTokenClassification.from_pretrained(model_name, torch_dtype=torch.float16 if torch.cuda.is_available() else None)
         # Build ONE pipeline (your custom one) that already computes probabilities
-        token_classifier = pipeline(
-            "token-classification",
+        # ONE pipeline; override aggregation per-call
+        pipe = MyPipeline(
             model=model,
             tokenizer=tokenizer,
-            aggregation_strategy="simple",   # get grouped spans
-            pipeline_class=MyPipeline,
-            device=0  # important for ZeroGPU
+            device=0,
+            framework="pt"
         )
 
-        # Run once
-        results_with_probs = token_classifier(text)
-        # If you also want the vanilla aggregated view, you can derive it from the same results:
-        results_simple = [
-            {
-                "word": e.get("word"),
-                # MyPipeline returns grouped entities with 'entity_group'
-                "entity_group": e.get("entity_group", e.get("entity")),
-                "start": e["start"],
-                "end": e["end"],
-                "score": e["score"],
-            }
-            for e in results_with_probs
-        ]
+        # ---- run twice with different aggregation strategies ----
+        results_simple = pipe(text, aggregation_strategy="simple")  # output #1
+        results_none = pipe(text, aggregation_strategy="none")  # output #2 (per-token + probabilities)
+        print(results_none)
+        # ---------------------------------------------------------
 
-        # ---------- your rendering (with one small bug fix: use last_idx2) ----------
-        #color_dict = {...}  # keep your dict as-is
+        # sort
+        sorted_results1 = sorted(results_simple, key=lambda x: x["start"])
+        sorted_results2 = sorted(results_none, key=lambda x: x["start"])
 
-        sorted_results = sorted(results_simple, key=lambda x: x["start"])
-        sorted_results2 = sorted(results_with_probs, key=lambda x: x["start"])
+        # color helper that tolerates B-/I- prefixes
+        def pick_color(label: str) -> str:
+            base = label[2:] if label.startswith(("B-", "I-")) else label
+            return color_dict.get(label, color_dict.get(base, "#D3D3D3"))
 
-        # FIRST VIEW
-        output = ""
-        last_idx = 0
-        for entity in sorted_results:
-            start = entity["start"]; end = entity["end"]
-            label = entity["entity_group"]; score = entity["score"]
-            word = html.escape(text[start:end])
-            output += html.escape(text[last_idx:start])
-            color = color_dict.get(label, "#D3D3D3")
-            tooltip = f"{label} ({score:.2f})"
-            word_with_label = f"{word}_{label}"
-            output += (
-                f"<span style='background-color: {color}; padding: 2px; border-radius: 4px;' "
+        # ---------- Output 1: SIMPLE (grouped spans) ----------
+        output1, last_idx = "", 0
+        for e in sorted_results1:
+            s, t = e["start"], e["end"]
+            lab = e["entity_group"]  # grouped results use entity_group
+            score = e["score"]
+            word = html.escape(text[s:t])
+            output1 += html.escape(text[last_idx:s])
+            color = pick_color(lab)
+            tooltip = f"{lab} ({score:.2f})"
+            word_with_label = f"{word}_{html.escape(lab)}"
+            output1 += (
+                f"<span style='background-color:{color};padding:2px;border-radius:4px;' "
                 f"title='{tooltip}'>{word_with_label}</span>"
             )
-            last_idx = end
-        output += html.escape(text[last_idx:])
+            last_idx = t
+        output1 += html.escape(text[last_idx:])
 
-        # SECOND VIEW (top-5)
-        output2 = ""
-        last_idx2 = 0   # FIX: track the second stream separately
-        for entity in sorted_results2:
-            start = entity["start"]; end = entity["end"]
-            label = entity.get("entity_group", entity.get("entity"))
-            probabilities = entity["probabilities"]
-            word = html.escape(text[start:end])
-            output2 += html.escape(text[last_idx2:start])
-            color = color_dict.get(label, "#D3D3D3")
+        # ---------- Output 2: NONE (token-level, top-5 tooltip) ----------
+        output2, last_idx2 = "", 0
+        for e in sorted_results2:
+            s, t = e["start"], e["end"]
+            lab = e["entity"]  # NONE returns `entity`
+            probs = e["probabilities"]
+            word = html.escape(text[s:t])
+            output2 += html.escape(text[last_idx2:s])
+            color = pick_color(lab)
 
-            top5 = sorted(probabilities.items(), key=lambda kv: kv[1], reverse=True)[:5]
+            top5 = sorted(probs.items(), key=lambda kv: kv[1], reverse=True)[:5]
             top5_lines = [f"{html.escape(k)}: {v:.2%}" for k, v in top5]
             tooltip = "Top-5&#10;" + "&#10;".join(top5_lines)
 
-            word_with_label = f"{word}_{label}"
+            word_with_label = f"{word}_{html.escape(lab)}"
             output2 += (
-                f"<span style='background-color: {color}; padding: 2px; border-radius: 4px;' "
+                f"<span style='background-color:{color};padding:2px;border-radius:4px;' "
                 f"title='{tooltip}'>{word_with_label}</span>"
             )
-            last_idx2 = end
+            last_idx2 = t
         output2 += html.escape(text[last_idx2:])
 
-        # TABLE
-        table_html = "<table style='border-collapse: collapse; font-family: sans-serif;'>"
-        table_html += "<tr><th style='border: 1px solid #ccc; padding: 6px;'>Token</th>"
-        table_html += "<th style='border: 1px solid #ccc; padding: 6px;'>SNACS Label</th>"
-        table_html += "<th style='border: 1px solid #ccc; padding: 6px;'>Confidence</th></tr>"
-        for e in sorted_results:
+        # (table can use results_simple)
+        table_html = "<table style='border-collapse:collapse;font-family:sans-serif;'>"
+        table_html += "<tr><th style='border:1px solid #ccc;padding:6px;'>Token</th>"
+        table_html += "<th style='border:1px solid #ccc;padding:6px;'>SNACS Label</th>"
+        table_html += "<th style='border:1px solid #ccc;padding:6px;'>Confidence</th></tr>"
+        for e in sorted_results1:
             token = html.escape(e["word"])
-            label = e["entity_group"]
+            lab = e["entity_group"]
             score = f"{e['score']:.2f}"
-            color = color_dict.get(label, "#D3D3D3")
-            table_html += "<tr>"
-            table_html += f"<td style='border: 1px solid #ccc; padding: 6px; background-color: {color};'>{token}</td>"
-            table_html += f"<td style='border: 1px solid #ccc; padding: 6px; background-color: {color};'>{label}</td>"
-            table_html += f"<td style='border: 1px solid #ccc; padding: 6px;'>{score}</td>"
-            table_html += "</tr>"
+            color = pick_color(lab)
+            table_html += (
+                "<tr>"
+                f"<td style='border:1px solid #ccc;padding:6px;background-color:{color};'>{token}</td>"
+                f"<td style='border:1px solid #ccc;padding:6px;background-color:{color};'>{lab}</td>"
+                f"<td style='border:1px solid #ccc;padding:6px;'>{score}</td>"
+                "</tr>"
+            )
         table_html += "</table>"
 
-        styled_html = f"<div style='font-family: sans-serif; line-height: 1.6;'>{output}</div>"
-        styled_html2 = f"<div style='font-family: sans-serif; line-height: 1.6;'>{output2}</div>"
-        return styled_html, styled_html2, table_html
+        styled_html1 = f"<div style='font-family:sans-serif;line-height:1.6;'>{output1}</div>"
+        styled_html2 = f"<div style='font-family:sans-serif;line-height:1.6;'>{output2}</div>"
+        return styled_html1, styled_html2, table_html
     except Exception as e:
         # Force the real error into the Space logs
         import traceback, sys
