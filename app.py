@@ -5,12 +5,9 @@ from transformers import pipeline, AutoTokenizer, AutoModelForTokenClassificatio
 import torch
 import numpy as np
 
-# --- Your custom pipeline, no decorator on classes/helpers ---
 class MyPipeline(TokenClassificationPipeline):
     def postprocess(self, all_outputs, aggregation_strategy="none", ignore_labels=None):
-        # Normalize aggregation_strategy to a lowercase string
         try:
-            # Handle HF enum
             from transformers.pipelines.token_classification import AggregationStrategy
             if isinstance(aggregation_strategy, AggregationStrategy):
                 aggregation_strategy = aggregation_strategy.name.lower()
@@ -154,8 +151,6 @@ class MyPipeline(TokenClassificationPipeline):
             results_with_probs.append(ent)
 
         return results_with_probs
-
-# --- Gradio callback: put ALL model work inside this GPU-decorated function ---
 
 @spaces.GPU
 def classify_tokens(text: str):
@@ -342,8 +337,7 @@ def classify_tokens(text: str):
                   'p.SocialRel-p.Source': '#4f3f8f',
                   'p.Whole-p.Circumstance': '#c70411',
                   'p.Purpose-p.Goal': '#f2f199'}
-        # Load once per call (ZeroGPU session). If you want to cache between calls, use a global
-        # lazy-holder that only stores CPU objects; but safest with ZeroGPU is to init here.
+
         model_name = "WesScivetti/SNACS_Multilingual"
 
         tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -357,7 +351,6 @@ def classify_tokens(text: str):
             framework="pt"
         )
 
-        # ---- run twice with different aggregation strategies ----
         results_simple = pipe(text, aggregation_strategy="simple")  # output #1
         results_none = pipe(text, aggregation_strategy="none", ignore_labels=[])  # output #2 (per-token + probabilities)
         print(results_none)
@@ -390,7 +383,7 @@ def classify_tokens(text: str):
             last_idx = t
         output1 += html.escape(text[last_idx:])
 
-        # ---------- Output 2: NONE (token-level, top-5 tooltip) ----------
+
         output2, last_idx2 = "", 0
         for e in sorted_results2:
             s, t = e["start"], e["end"]
