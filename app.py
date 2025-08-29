@@ -161,7 +161,7 @@ class MyPipeline(TokenClassificationPipeline):
 def classify_tokens(text: str):
     try:
         color_dict = {'None': '#6adf97',
-                  'O': '#f18621',
+                  'O': '#bebdc9',
                   'p.Purpose-p.Purpose': '#3cb44b',
                   'p.SocialRel-p.Gestalt': '#911eb4',
                   'B-p.Cost-p.Cost': '#f4b518',
