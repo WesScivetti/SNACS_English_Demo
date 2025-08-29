@@ -586,17 +586,17 @@ def classify_tokens(text):
 
     return styled_html, styled_html2, table_html
 
-# iface = gr.Interface(
-#     fn=classify_tokens,
-#     inputs=gr.Textbox(lines=4, placeholder="Enter a sentence...", label="Input Text"),
-#     outputs=[
-#         gr.HTML(label="SNACS Tagged Sentence"),
-#          gr.HTML(label="SNACS Tagged Sentence with No Label Aggregation"),
-#         gr.HTML(label="SNACS Table with Colored Labels")
-#     ],
-#     title="SNACS Classification",
-#     description="SNACS Classification. Now Multilingual! See the <a href='https://arxiv.org/abs/1704.02134'>SNACS guidelines</a> for details.",
-#     theme="default"
-# )
+iface = gr.Interface(
+    fn=classify_tokens,
+    inputs=gr.Textbox(lines=4, placeholder="Enter a sentence...", label="Input Text"),
+    outputs=[
+        gr.HTML(label="SNACS Tagged Sentence"),
+         gr.HTML(label="SNACS Tagged Sentence with No Label Aggregation"),
+        gr.HTML(label="SNACS Table with Colored Labels")
+    ],
+    title="SNACS Classification",
+    description="SNACS Classification. Now Multilingual! See the <a href='https://arxiv.org/abs/1704.02134'>SNACS guidelines</a> for details.",
+    theme="default"
+)
 
-# iface.launch()
+iface.launch()
