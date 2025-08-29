@@ -9,13 +9,13 @@ import numpy as np
 # Load the pipeline (token classification)
 # token_classifier = pipeline("token-classification", model="WesScivetti/SNACS_English", aggregation_strategy="simple")
 
-@spaces.GPU  # <-- required for ZeroGPU
+@spaces.GPU
 def softmax(outputs):
     maxes = np.max(outputs, axis=-1, keepdims=True)
     shifted_exp = np.exp(outputs - maxes)
     return shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
 
-@spaces.GPU  # <-- required for ZeroGPU
+@spaces.GPU
 class MyPipeline(TokenClassificationPipeline):
     def postprocess(self, all_outputs, aggregation_strategy="none", ignore_labels=None):
         if ignore_labels is None:
@@ -515,11 +515,18 @@ def classify_tokens(text):
         label = entity["entity"]
         score = entity["score"]
         probabilities = entity["probabilities"]
+        top5 = sorted(probabilities.items(), key=lambda kv: kv[1], reverse=True)[:5]
+
         word = html.escape(text[start:end])
         output2 += html.escape(text[last_idx:start])
 
         color = color_dict.get(label, "#D3D3D3")
-        tooltip = f"{label} ({probabilities:.2f})"
+
+        # tooltip = f"{label} ({score:.2f})"
+        top5_lines = [f"{html.escape(k)}: {v:.2%}" for k, v in top5]
+        # Use &#10; for line breaks in the title attribute
+        tooltip = "Top-5&#10;" + "&#10;".join(top5_lines)
+
         word_with_label = f"{word}_{label}"
 
         output2 += (
