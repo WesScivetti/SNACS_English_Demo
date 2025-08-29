@@ -382,7 +382,7 @@ def classify_tokens(text: str):
             output1 += html.escape(text[last_idx:s])
             color = pick_color(lab)
             tooltip = f"{lab} ({score:.2f})"
-            word_with_label = f"{word}_{html.escape(lab)}"
+            word_with_label = f"{word}"
             output1 += (
                 f"<span style='background-color:{color};padding:2px;border-radius:4px;' "
                 f"title='{tooltip}'>{word_with_label}</span>"
