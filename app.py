@@ -377,6 +377,8 @@ def classify_tokens(text: str):
         lab1, lab2 = lab.split("-")
         if lab1==lab2:
             lab = lab1
+        else:
+            lab = lab1 + "~>" + lab2
         return lab
 
     # ---------- Output 1: SIMPLE (grouped spans) ----------
