@@ -365,16 +365,25 @@ def classify_tokens(text: str):
             base = label[2:] if label.startswith(("B-", "I-")) else label
             return color_dict.get(label, color_dict.get(base, "#D3D3D3"))
 
+        def display_label(label: str) -> str:
+            """Simplified version of the label to display, removing "p." prefix and un-duplicating supersenses"""
+            lab = label.replace("p.", "")
+            lab1, lab2 = lab.split("-")
+            if lab1==lab2:
+                lab = lab1
+            return lab
+        
         # ---------- Output 1: SIMPLE (grouped spans) ----------
         output1, last_idx = "", 0
         for e in sorted_results1:
             s, t = e["start"], e["end"]
             lab = e["entity_group"]  # grouped results use entity_group
+            short_lab = display_label(lab)
             score = e["score"]
             word = html.escape(text[s:t])
             output1 += html.escape(text[last_idx:s])
             color = pick_color(lab)
-            tooltip = f"{lab} ({score:.2f})"
+            tooltip = f"{short_lab} ({score:.2f})"
             word_with_label = f"{word}"
             output1 += (
                 f"<span style='background-color:{color};padding:2px;border-radius:4px;' "
@@ -413,12 +422,13 @@ def classify_tokens(text: str):
         for e in sorted_results1:
             token = html.escape(e["word"])
             lab = e["entity_group"]
+            short_lab = display_label(lab)
             score = f"{e['score']:.2f}"
             color = pick_color(lab)
             table_html += (
                 "<tr>"
                 f"<td style='border:1px solid #ccc;padding:6px;background-color:{color};'>{token}</td>"
-                f"<td style='border:1px solid #ccc;padding:6px;background-color:{color};'>{lab}</td>"
+                f"<td style='border:1px solid #ccc;padding:6px;background-color:{color};'>{short_lab}</td>"
                 f"<td style='border:1px solid #ccc;padding:6px;'>{score}</td>"
                 "</tr>"
             )
@@ -447,3 +457,4 @@ iface = gr.Interface(
     theme="default"
 )
 iface.launch()
+
