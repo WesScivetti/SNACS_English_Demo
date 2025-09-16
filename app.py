@@ -429,7 +429,7 @@ def classify_tokens(text: str):
             color = lbl2color[base]
         else:
             color = PALETTE[len(lbl2color) % len(PALETTE)]
-            lbl2color[lbl] = color
+            lbl2color[base] = color
         return color
         #return color_dict.get(label, color_dict.get(base, "#D3D3D3"))
 
