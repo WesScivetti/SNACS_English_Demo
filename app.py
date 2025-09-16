@@ -6,7 +6,7 @@ import torch
 import numpy as np
 
 DESCRIPTION = """
-<p>Enter text <b>in any language</b> to analyze the in-context meanings of adpositions/possessives/case markers!
+<p>Enter text <b>in any language</b> to analyze the in-context meanings of adpositions/possessives/case markers.
 An <b>adposition</b> is a <i>pre</i>position (that precedes a noun, as in English) or a <i>post</i>position (that follows a noun, as in Japanese).
 The tagger adds semantic labels from the SNACS tagset to indicate spatial, temporal, and other kinds of relationships. 
 See the <a href="https://www.xposition.org/">Xposition site</a> and <a href="https://arxiv.org/abs/1704.02134">PDF manual</a> for details.</p>
