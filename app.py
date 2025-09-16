@@ -5,6 +5,32 @@ from transformers import pipeline, AutoTokenizer, AutoModelForTokenClassificatio
 import torch
 import numpy as np
 
+DESCRIPTION = """
+<p>Enter text <b>in any language</b> to analyze the in-context meanings of adpositions/possessives/case markers!
+An <b>adposition</b> is a <i>pre</i>position (that precedes a noun, as in English) or a <i>post</i>position (that follows a noun, as in Japanese).
+The tagger adds semantic labels from the SNACS tagset to indicate spatial, temporal, and other kinds of relationships. 
+See the <a href="https://www.xposition.org/">Xposition site</a> and <a href="https://arxiv.org/abs/1704.02134">PDF manual</a> for details.</p>
+
+<p>The tagger is a machine learning <a href="https://github.com/WesScivetti/snacs/tree/main">system</a> (specifically XLM-RoBERTa-large)
+that has been fine-tuned on manually tagged data in 5 target languages: English, Mandarin Chinese, Hindi, Gujarati, and Japanese.
+The system output is not always correct (even if the model’s confidence estimate is close to 100%),
+and will likely be less accurate beyond the target languages.</p>
+
+<details><summary>Linguistic notes</summary>
+<ul>
+    <li>Some of the tagged items are single words (like <b><i>to</i></b>); others are multiword expressions (like <b><i>according to</i></b>).</li>
+    <li>Possessive markers and possessive pronouns are tagged.</li>
+    <li>The English infinitive marker <b><i>to</i></b> is tagged if it marks a purpose.</li>
+    <li>Phrasal verb particles (like <b><i>up</i></b> in <b><i>give up</i></b>) are not tagged if the meaning is idiomatic.
+    However, words like <b><i>up</i></b>, <b><i>away</i></b>, and <b><i>together</i></b> are tagged if the meaning is spatial
+    (“The bird flew <b><i>away</i></b>”).</li>
+</ul>
+</details>
+
+<p>Try these examples: <a href="/?deep_link=wds5yTrUDRM">Harry Potter</a>, <a href="/?deep_link=qBMinyRvp9U">Through the Looking Glass</a>,
+<a href="/?deep_link=5TRR7hf-068">Fresh Prince of Bel-Air</a>, <a href="/?deep_link=1ST_-aaAj8g">Don Quixote</a></p>
+"""
+
 class MyPipeline(TokenClassificationPipeline):
     """Custom Pipeline class with custom postprocess function, designed to output proability distribution in addition to top scores
     Inherits from HF TokenClassificationPipeline"""
@@ -460,9 +486,10 @@ iface = gr.Interface(
         gr.HTML(label="SNACS Table with Colored Labels"),
         gr.HTML(label="SNACS Tagged Sentence with No Label Aggregation")
     ],
-    title="SNACS Classification",
-    description="SNACS Classification. Now Multilingual! See the <a href='https://arxiv.org/abs/1704.02134'>SNACS guidelines</a> for details.",
+    title="SNACS Tagging",
+    description=DESCRIPTION,
     theme="default"
 )
 iface.launch()
+
 
