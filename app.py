@@ -372,6 +372,36 @@ def classify_tokens(text: str):
               'p.Whole-p.Circumstance': '#fa737c',
               'p.Purpose-p.Goal': '#f2f199'}
 
+    PALETTE = [  # "#1f77b4",
+                  "#ff7f0e",
+                  "#2ca02c",
+                  "#d62728",
+                  "#9467bd",
+                  # "#8c564b",
+                  "#e377c2",
+                  # "#7f7f7f",
+                  "#bcbd22",
+                  "#17becf",
+                  "#aec7e8",
+                  "#ffbb78",
+                  "#98df8a",
+                  "#ff9896",
+                  "#c5b0d5",
+                  "#c49c94",
+                  "#f7b6d2",
+                  # "#c7c7c7",
+                  "#dbdb8d",
+                  "#9edae5"
+              ][::-1]  # reverse-sort to put the lighter colors first
+    # lbl2color = {}
+    # for tok, lbl in predictions:
+    #     if is_snacs(lbl):
+    #         if lbl in lbl2color:
+    #             color = lbl2color[lbl]
+    #         else:
+    #             color = PALETTE[len(lbl2color) % len(PALETTE)]
+    #             lbl2color[lbl] = color
+
     model_name = "WesScivetti/SNACS_Multilingual"
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -393,9 +423,15 @@ def classify_tokens(text: str):
     sorted_results2 = sorted(results_none, key=lambda x: x["start"])
 
     # color helper that tolerates B-/I- prefixes
-    def pick_color(label: str) -> str:
+    def pick_color(label: str, lbl2color: dict) -> str:
         base = label[2:] if label.startswith(("B-", "I-")) else label
-        return color_dict.get(label, color_dict.get(base, "#D3D3D3"))
+        if base in lbl2color:
+            color = lbl2color[base]
+        else:
+            color = PALETTE[len(lbl2color) % len(PALETTE)]
+            lbl2color[lbl] = color
+        return color
+        #return color_dict.get(label, color_dict.get(base, "#D3D3D3"))
 
     def display_label(label: str) -> str:
         """Simplified version of the label to display, removing "p." prefix and un-duplicating supersenses"""
@@ -409,6 +445,7 @@ def classify_tokens(text: str):
 
     # ---------- Output 1: SIMPLE (grouped spans) ----------
     output1, last_idx = "", 0
+    lbl2color = {}
     for e in sorted_results1:
         s, t = e["start"], e["end"]
         lab = e["entity_group"]  # grouped results use entity_group
@@ -416,7 +453,7 @@ def classify_tokens(text: str):
         score = e["score"]
         word = html.escape(text[s:t])
         output1 += html.escape(text[last_idx:s])
-        color = pick_color(lab)
+        color = pick_color(lab, lbl2color)
         tooltip = f"{short_lab} ({score:.2f})"
         word_with_label = f"{word}"
         output1 += (
@@ -434,7 +471,7 @@ def classify_tokens(text: str):
         probs = e["probabilities"]
         word = html.escape(text[s:t])
         output2 += html.escape(text[last_idx2:s])
-        color = pick_color(lab)
+        color = pick_color(lab, lab2color)
 
         top5 = sorted(probs.items(), key=lambda kv: kv[1], reverse=True)[:5]
         top5_lines = [f"{html.escape(k)}: {v:.2%}" for k, v in top5]
@@ -458,7 +495,7 @@ def classify_tokens(text: str):
         lab = e["entity_group"]
         short_lab = display_label(lab)
         score = f"{e['score']:.2f}"
-        color = pick_color(lab)
+        color = pick_color(lab, lab2color)
         table_html += (
             "<tr>"
             f"<td style='border:1px solid #ccc;padding:6px;background-color:{color};'>{token}</td>"
