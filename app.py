@@ -471,7 +471,7 @@ def classify_tokens(text: str):
         probs = e["probabilities"]
         word = html.escape(text[s:t])
         output2 += html.escape(text[last_idx2:s])
-        color = pick_color(lab, lab2color)
+        color = pick_color(lab, lbl2color)
 
         top5 = sorted(probs.items(), key=lambda kv: kv[1], reverse=True)[:5]
         top5_lines = [f"{html.escape(k)}: {v:.2%}" for k, v in top5]
@@ -495,7 +495,7 @@ def classify_tokens(text: str):
         lab = e["entity_group"]
         short_lab = display_label(lab)
         score = f"{e['score']:.2f}"
-        color = pick_color(lab, lab2color)
+        color = pick_color(lab, lbl2color)
         table_html += (
             "<tr>"
             f"<td style='border:1px solid #ccc;padding:6px;background-color:{color};'>{token}</td>"
