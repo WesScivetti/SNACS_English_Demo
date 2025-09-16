@@ -427,6 +427,9 @@ def classify_tokens(text: str):
         base = label[2:] if label.startswith(("B-", "I-")) else label
         if base in lbl2color:
             color = lbl2color[base]
+        elif base == "O":
+            color = "#b0adac"
+            lbl2color[base] = color
         else:
             color = PALETTE[len(lbl2color) % len(PALETTE)]
             lbl2color[base] = color
