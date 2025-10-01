@@ -5,6 +5,7 @@ from transformers import pipeline, AutoTokenizer, AutoModelForTokenClassificatio
 import torch
 import numpy as np
 
+#Description text for the Gradio interface
 DESCRIPTION = """
 <p>Enter text <b>in any language</b> to analyze the in-context meanings of adpositions/possessives/case markers.
 An <b>adposition</b> is a <i>pre</i>position (that precedes a noun, as in English) or a <i>post</i>position (that follows a noun, as in Japanese).
