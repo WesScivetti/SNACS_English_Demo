@@ -207,17 +207,17 @@ def classify_tokens(text: str):
                   # "#8c564b",
                   "#e377c2",
                   # "#7f7f7f",
-                  "#bcbd22",
+                  "#cccc00", # tweaked
                   "#17becf",
                   "#aec7e8",
                   "#ffbb78",
+                  "#c49c94",
+                  "#c5b0d5",
                   "#98df8a",
                   "#ff9896",
-                  "#c5b0d5",
-                  "#c49c94",
                   "#f7b6d2",
                   # "#c7c7c7",
-                  "#dbdb8d",
+                  "#f7f777", # tweaked
                   "#9edae5"
               ][::-1]  # reverse-sort to put the lighter colors first
 
@@ -352,4 +352,3 @@ iface = gr.Interface(
     live=False,
 )
 iface.launch()
-
