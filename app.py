@@ -28,7 +28,7 @@ and will likely be less accurate beyond the target languages.</p>
 </ul>
 </details>
 
-<p>Try these examples:
+<p>Try the examples below, or enter your own text in the box above and click the Submit button.
 </p>
 """
 
@@ -540,7 +540,7 @@ iface = gr.Interface(
     description=DESCRIPTION,
     theme="default",
     examples=EXAMPLES,
-    examples_per_page=1,
+    examples_per_page=4,
     live=False,
 )
 iface.launch()
