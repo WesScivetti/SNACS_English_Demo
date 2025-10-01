@@ -29,12 +29,17 @@ and will likely be less accurate beyond the target languages.</p>
 </details>
 
 <p>Try these examples:
-    <a href="#" on:click="document.getElementsByTagName('textarea')[0].value='When Mr. and Mrs. Dursley woke up on the dull, gray Tuesday our story starts, there was nothing about the cloudy sky outside to suggest that strange and mysterious things would soon be happening all over the country. Mr. Dursley hummed as he picked out his most boring tie for work, and Mrs. Dursley gossiped away happily as she wrestled a screaming Dudley into his high chair.';">Harry Potter</a>, 
-    <a href="#" on:click="document.getElementsByTagName('textarea')[0].value='Humpty Dumpty was sitting, with his legs crossed like a Turk, on the top of a high wall — such a narrow one that Alice quite wondered how he could keep his balance — and, as his eyes were steadily fixed in the opposite direction, and he didn\'t take the least notice of her, she thought he must be a stuffed figure, after all.';">Through the Looking Glass</a>,
-    <a href="#" on:click="document.getElementsByTagName('textarea')[0].value='In West Philadelphia born and raised\nOn the playground is where I spent most of my days\nChillin\' out, maxin\', relaxin\' all cool\nAnd all shootin\' some b-ball outside of the school\nWhen a couple of guys who were up to no good\nStarted makin\' trouble in my neighborhood\nI got in one little fight and my mom got scared\nAnd said &quot;You\'re movin\' with your auntie and uncle in Bel-Air&quot;';">Fresh Prince of Bel-Air</a>, 
-    <a href="#" on:click="document.getElementsByTagName('textarea')[0].value='En un lugar de la Mancha, de cuyo nombre no quiero acordarme, no ha mucho tiempo que vivía un hidalgo de los de lanza en astillero, adarga antigua, rocín flaco y galgo corredor. Una olla de algo más vaca que carnero, salpicón las más noches, duelos y quebrantos los sábados, lantejas los viernes, algún palomino de añadidura los domingos, consumían las tres partes de su hacienda. El resto della concluían sayo de velarte, calzas de velludo para las fiestas, con sus pantuflos de lo mesmo, y los días de entresemana se honraba con su vellorí de lo más fino.';">Don Quixote</a>
 </p>
 """
+
+# short labels shown on the buttons, long text inserted into the textbox
+EXAMPLES = [
+    ['When Mr. and Mrs. Dursley woke up on the dull, gray Tuesday our story starts, there was nothing about the cloudy sky outside to suggest that strange and mysterious things would soon be happening all over the country. Mr. Dursley hummed as he picked out his most boring tie for work, and Mrs. Dursley gossiped away happily as she wrestled a screaming Dudley into his high chair.'],   # inserts "example 1" text
+    ['Humpty Dumpty was sitting, with his legs crossed like a Turk, on the top of a high wall — such a narrow one that Alice quite wondered how he could keep his balance — and, as his eyes were steadily fixed in the opposite direction, and he didn\'t take the least notice of her, she thought he must be a stuffed figure, after all.'],
+    ['In West Philadelphia born and raised\nOn the playground is where I spent most of my days\nChillin\' out, maxin\', relaxin\' all cool\nAnd all shootin\' some b-ball outside of the school\nWhen a couple of guys who were up to no good\nStarted makin\' trouble in my neighborhood\nI got in one little fight and my mom got scared\nAnd said &quot;You\'re movin\' with your auntie and uncle in Bel-Air&quot;'],
+    ['En un lugar de la Mancha, de cuyo nombre no quiero acordarme, no ha mucho tiempo que vivía un hidalgo de los de lanza en astillero, adarga antigua, rocín flaco y galgo corredor. Una olla de algo más vaca que carnero, salpicón las más noches, duelos y quebrantos los sábados, lantejas los viernes, algún palomino de añadidura los domingos, consumían las tres partes de su hacienda. El resto della concluían sayo de velarte, calzas de velludo para las fiestas, con sus pantuflos de lo mesmo, y los días de entresemana se honraba con su vellorí de lo más fino.']
+]
+
 
 class MyPipeline(TokenClassificationPipeline):
     """Custom Pipeline class with custom postprocess function, designed to output proability distribution in addition to top scores
@@ -533,6 +538,9 @@ iface = gr.Interface(
     ],
     title="SNACS Tagging",
     description=DESCRIPTION,
-    theme="default"
+    theme="default",
+    examples=EXAMPLES,
+    examples_per_page=1,
+    live=False,
 )
 iface.launch()
