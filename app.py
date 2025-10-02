@@ -39,7 +39,7 @@ EXAMPLES = [
     ['In West Philadelphia born and raised\nOn the playground is where I spent most of my days\nChillin\' out, maxin\', relaxin\' all cool\nAnd all shootin\' some b-ball outside of the school\nWhen a couple of guys who were up to no good\nStarted makin\' trouble in my neighborhood\nI got in one little fight and my mom got scared\nAnd said "You\'re movin\' with your auntie and uncle in Bel-Air"'],
     ['En un lugar de la Mancha, de cuyo nombre no quiero acordarme, no ha mucho tiempo que vivía un hidalgo de los de lanza en astillero, adarga antigua, rocín flaco y galgo corredor. Una olla de algo más vaca que carnero, salpicón las más noches, duelos y quebrantos los sábados, lantejas los viernes, algún palomino de añadidura los domingos, consumían las tres partes de su hacienda. El resto della concluían sayo de velarte, calzas de velludo para las fiestas, con sus pantuflos de lo mesmo, y los días de entresemana se honraba con su vellorí de lo más fino.']
 ]
-
+EXAMPLE_LABELS = ['Harry Potter (en)', 'Through the Looking Glass (en)', 'Fresh Prince of Bel-Air (en)', 'Don Quixote (es)']
 
 class MyPipeline(TokenClassificationPipeline):
     """Custom Pipeline class with custom postprocess function, designed to output proability distribution in addition to top scores
@@ -354,7 +354,8 @@ iface = gr.Interface(
     description=DESCRIPTION,
     theme=light_theme,
     examples=EXAMPLES,
-    examples_per_page=4,
+    example_labels=EXAMPLE_LABELS,
+    examples_per_page=10,
     live=False,
 )
 iface.launch()
