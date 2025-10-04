@@ -12,6 +12,15 @@ DESCR_TOP = """
 """
 
 DESCR_PART_3 = """
+<p style="font-size: 120%;">Enter some text in the box (or use the examples below) and click the Tag! button.
+</p>
+"""
+
+DESCR_PARA_1 = """<p>🌐 Enter text <b>in any language</b> to analyze the in-context meanings of adpositions/possessives/case markers.
+An <b>adposition</b> is a <i>pre</i>position (that precedes a noun, as in English) or a <i>post</i>position (that follows a noun, as in Japanese).
+The tagger adds semantic labels from the SNACS tagset to indicate spatial, temporal, and other kinds of relationships. 
+See the <a href="https://www.xposition.org/">Xposition site</a> and <a href="https://arxiv.org/abs/1704.02134">PDF manual</a> for details.</p>
+
 <details><summary>Linguistic notes</summary>
 <ul>
     <li>Some of the tagged items are single words (like <b><i>to</i></b>); others are multiword expressions (like <b><i>according to</i></b>).</li>
@@ -22,21 +31,14 @@ DESCR_PART_3 = """
     (“The bird flew <b><i>away</i></b>”).</li>
 </ul>
 </details>
-
-<p>Try the examples below, or enter your own text in the box and click the Tag! button.
-</p>
-"""
-
-DESCR_PARA_1 = """<p>🌐 Enter text <b>in any language</b> to analyze the in-context meanings of adpositions/possessives/case markers.
-An <b>adposition</b> is a <i>pre</i>position (that precedes a noun, as in English) or a <i>post</i>position (that follows a noun, as in Japanese).
-The tagger adds semantic labels from the SNACS tagset to indicate spatial, temporal, and other kinds of relationships. 
-See the <a href="https://www.xposition.org/">Xposition site</a> and <a href="https://arxiv.org/abs/1704.02134">PDF manual</a> for details.</p>
 """
 
 DESCR_PARA_2 = """<p>🤖 The tagger is a machine learning <a href="https://github.com/WesScivetti/snacs/tree/main">system</a> (specifically XLM-RoBERTa-large)
 that has been fine-tuned on manually tagged data in 5 target languages: English, Mandarin Chinese, Hindi, Gujarati, and Japanese.
 The system output is not always correct (even if the model’s confidence estimate is close to 100%),
 and will likely be less accurate beyond the target languages.</p>
+
+<p><i>This demo by Wesley Scivetti and Nathan Schneider, 2025 (<a href="https://github.com/WesScivetti/SNACS_English_Demo">code</a>).</i></p>
 """
 
 # short labels shown on the buttons, long text inserted into the textbox
