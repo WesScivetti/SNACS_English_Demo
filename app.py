@@ -336,10 +336,6 @@ def classify_tokens(text: str):
     #     # Also show something in the UI so you know it’s the worker, not Gradio
     #     return f"<pre>{html.escape(repr(e))}</pre>", "", ""
 
-# Force light mode
-light_theme = gr.themes.Default().set(
-    dark_mode=False
-)
 
 #Gradio interface setup
 iface = gr.Interface(
@@ -352,7 +348,6 @@ iface = gr.Interface(
     ],
     title="SNACS Tagging",
     description=DESCRIPTION,
-    theme=light_theme,
     examples=EXAMPLES,
     example_labels=EXAMPLE_LABELS,
     examples_per_page=10,
