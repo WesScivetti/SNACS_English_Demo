@@ -1,4 +1,5 @@
 import html
+import json
 import gradio as gr
 import spaces
 from transformers import pipeline, AutoTokenizer, AutoModelForTokenClassification, TokenClassificationPipeline
@@ -239,13 +240,12 @@ def classify_tokens(text: str):
         framework="pt"
     )
 
-    results_simple = pipe(text, aggregation_strategy="simple")  # output #1
-    results_none = pipe(text, aggregation_strategy="none", ignore_labels=[])  # output #2 (per-token + probabilities)
-    print(results_none)
+    # tagged spans
+    results_spans = pipe(text, aggregation_strategy="simple").sort(key=lambda x: x["start"])
 
-    # sort
-    sorted_results1 = sorted(results_simple, key=lambda x: x["start"])
-    sorted_results2 = sorted(results_none, key=lambda x: x["start"])
+    # per-token + probabilities
+    results_tokens = pipe(text, aggregation_strategy="none", ignore_labels=[]).sort(key=lambda x: x["start"])
+    print(results_tokens)
 
     # color helper that tolerates B-/I- prefixes
     def pick_color(label: str, lbl2color: dict) -> str:
@@ -273,7 +273,7 @@ def classify_tokens(text: str):
     # ---------- Output 1: SIMPLE (grouped spans) ----------
     output1, last_idx = "", 0
     lbl2color = {}
-    for e in sorted_results1:
+    for e in results_spans:
         s, t = e["start"], e["end"]
         lab = e["entity_group"]  # grouped results use entity_group
         short_lab = display_label(lab)
@@ -292,7 +292,7 @@ def classify_tokens(text: str):
 
 
     output2, last_idx2 = "", 0
-    for e in sorted_results2:
+    for e in results_tokens:
         s, t = e["start"], e["end"]
         lab = e["entity"]  # NONE returns `entity`
         probs = e["probabilities"]
@@ -317,7 +317,7 @@ def classify_tokens(text: str):
     table_html += "<tr><th style='border:1px solid #ccc;padding:6px;'>Token</th>"
     table_html += "<th style='border:1px solid #ccc;padding:6px;'>SNACS Label</th>"
     table_html += "<th style='border:1px solid #ccc;padding:6px;'>Confidence</th></tr>"
-    for e in sorted_results1:
+    for e in results_spans:
         token = html.escape(e["word"])
         lab = e["entity_group"]
         short_lab = display_label(lab)
@@ -334,7 +334,7 @@ def classify_tokens(text: str):
 
     styled_html1 = f"<div style='font-family:sans-serif;line-height:1.6;'>{output1}</div>"
     styled_html2 = f"<div style='font-family:sans-serif;line-height:1.6;'>{output2}</div>"
-    return sorted_results1, styled_html1, table_html, styled_html2
+    return results_spans, json.dumps(results_spans), json.dumps(results_tokens), styled_html1, table_html, styled_html2
     # except Exception as e:
     #     # Force the real error into the Space logs
     #     import traceback, sys
@@ -343,7 +343,7 @@ def classify_tokens(text: str):
     #     return f"<pre>{html.escape(repr(e))}</pre>", "", ""
 
 
-with gr.Blocks(title="SNACS Tagging", theme="light") as demo:
+with gr.Blocks(title="SNACS Tagging") as demo:
     with gr.Row():
         description = gr.HTML(DESCR_TOP)
     
@@ -368,9 +368,13 @@ with gr.Blocks(title="SNACS Tagging", theme="light") as demo:
                 output1 = gr.HTML(label="SNACS Tagged Sentence")
                 output2 = gr.HTML(label="SNACS Table with Colored Labels")
                 output3 = gr.HTML(label="SNACS Tagged Sentence with No Label Aggregation")
+            with gr.Tab("JSON Spans"):
+                json_spans = gr.Code(language="json")
+            with gr.Tab("JSON Tokens"):
+                json_tokens = gr.Code(language="json")
 
-    examples.outputs = [simple_output,output1,output2,output3]
-    tag_btn.click(fn=classify_tokens, inputs=input_text, outputs=[simple_output,output1,output2,output3])
+    examples.outputs = [simple_output,json_spans,json_tokens,output1,output2,output3]
+    tag_btn.click(fn=classify_tokens, inputs=input_text, outputs=examples.outputs)
 
 
 demo.launch()
