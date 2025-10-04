@@ -6,17 +6,11 @@ import torch
 import numpy as np
 
 #Description text for the Gradio interface
-DESCRIPTION = """
-<p>Enter text <b>in any language</b> to analyze the in-context meanings of adpositions/possessives/case markers.
-An <b>adposition</b> is a <i>pre</i>position (that precedes a noun, as in English) or a <i>post</i>position (that follows a noun, as in Japanese).
-The tagger adds semantic labels from the SNACS tagset to indicate spatial, temporal, and other kinds of relationships. 
-See the <a href="https://www.xposition.org/">Xposition site</a> and <a href="https://arxiv.org/abs/1704.02134">PDF manual</a> for details.</p>
+DESCR_TOP = """
+<h1 style="text-align: center">SNACS Tagging</h1>
+"""
 
-<p>The tagger is a machine learning <a href="https://github.com/WesScivetti/snacs/tree/main">system</a> (specifically XLM-RoBERTa-large)
-that has been fine-tuned on manually tagged data in 5 target languages: English, Mandarin Chinese, Hindi, Gujarati, and Japanese.
-The system output is not always correct (even if the model’s confidence estimate is close to 100%),
-and will likely be less accurate beyond the target languages.</p>
-
+DESCR_PART_3 = """
 <details><summary>Linguistic notes</summary>
 <ul>
     <li>Some of the tagged items are single words (like <b><i>to</i></b>); others are multiword expressions (like <b><i>according to</i></b>).</li>
@@ -28,8 +22,20 @@ and will likely be less accurate beyond the target languages.</p>
 </ul>
 </details>
 
-<p>Try the examples below, or enter your own text in the box above and click the Submit button.
+<p>Try the examples below, or enter your own text in the box and click the Tag! button.
 </p>
+"""
+
+DESCR_PARA_1 = """<p>🌐 Enter text <b>in any language</b> to analyze the in-context meanings of adpositions/possessives/case markers.
+An <b>adposition</b> is a <i>pre</i>position (that precedes a noun, as in English) or a <i>post</i>position (that follows a noun, as in Japanese).
+The tagger adds semantic labels from the SNACS tagset to indicate spatial, temporal, and other kinds of relationships. 
+See the <a href="https://www.xposition.org/">Xposition site</a> and <a href="https://arxiv.org/abs/1704.02134">PDF manual</a> for details.</p>
+"""
+
+DESCR_PARA_2 = """<p>🤖 The tagger is a machine learning <a href="https://github.com/WesScivetti/snacs/tree/main">system</a> (specifically XLM-RoBERTa-large)
+that has been fine-tuned on manually tagged data in 5 target languages: English, Mandarin Chinese, Hindi, Gujarati, and Japanese.
+The system output is not always correct (even if the model’s confidence estimate is close to 100%),
+and will likely be less accurate beyond the target languages.</p>
 """
 
 # short labels shown on the buttons, long text inserted into the textbox
@@ -328,7 +334,7 @@ def classify_tokens(text: str):
 
     styled_html1 = f"<div style='font-family:sans-serif;line-height:1.6;'>{output1}</div>"
     styled_html2 = f"<div style='font-family:sans-serif;line-height:1.6;'>{output2}</div>"
-    return styled_html1, table_html, styled_html2
+    return sorted_results1, styled_html1, table_html, styled_html2
     # except Exception as e:
     #     # Force the real error into the Space logs
     #     import traceback, sys
@@ -337,20 +343,34 @@ def classify_tokens(text: str):
     #     return f"<pre>{html.escape(repr(e))}</pre>", "", ""
 
 
-#Gradio interface setup
-iface = gr.Interface(
-    fn=classify_tokens,
-    inputs=gr.Textbox(lines=4, placeholder="Enter a sentence...", label="Input Text"),
-    outputs=[
-        gr.HTML(label="SNACS Tagged Sentence"),
-        gr.HTML(label="SNACS Table with Colored Labels"),
-        gr.HTML(label="SNACS Tagged Sentence with No Label Aggregation")
-    ],
-    title="SNACS Tagging",
-    description=DESCRIPTION,
-    examples=EXAMPLES,
-    example_labels=EXAMPLE_LABELS,
-    examples_per_page=10,
-    live=False,
-)
-iface.launch()
+with gr.Blocks(title="SNACS Tagging", theme="light") as demo:
+    with gr.Row():
+        description = gr.HTML(DESCR_TOP)
+    
+    with gr.Row():
+        with gr.Column():
+            para1 = gr.HTML(DESCR_PARA_1)
+        with gr.Column():
+            para2 = gr.HTML(DESCR_PARA_2)
+
+    with gr.Row():
+        description = gr.HTML(DESCR_PART_3)
+
+    with gr.Row():
+        with gr.Column():
+            input_text = gr.Textbox(lines=4, placeholder="Enter a sentence...", label="Input Text"),
+            tag_btn = gr.Button("Tag!", variant="primary")
+            examples = gr.Examples(EXAMPLES, input_text, example_labels=EXAMPLE_LABELS)
+        with gr.Column() as output:
+            with gr.Tab("Simple Output"):
+                simple_output = gr.HighlightedText(label="Tagged Text")
+            with gr.Tab("Detailed Output"):
+                output1 = gr.HTML(label="SNACS Tagged Sentence")
+                output2 = gr.HTML(label="SNACS Table with Colored Labels")
+                output3 = gr.HTML(label="SNACS Tagged Sentence with No Label Aggregation")
+
+    examples.outputs = [simple_output,output1,output2,output3]
+    tag_btn.click(fn=classify_tokens, inputs=input_text, outputs=[simple_output,output1,output2,output3])
+
+
+demo.launch()
