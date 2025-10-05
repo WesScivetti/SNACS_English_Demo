@@ -200,7 +200,7 @@ class MyPipeline(TokenClassificationPipeline):
         return results_with_probs
 
 @spaces.GPU
-def classify_tokens(text: str):
+def classify_tokens(text: str, use_canned=False):
     """Main function for SNACS text classification that is called in the huggingface space
     Input: string to be tagged
     Output: HTML styled rendering of tagged outputs
@@ -230,24 +230,37 @@ def classify_tokens(text: str):
                   "#9edae5"
               ][::-1]  # reverse-sort to put the lighter colors first
 
-    model_name = "WesScivetti/SNACS_Multilingual"
+    if not use_canned:
+        model_name = "WesScivetti/SNACS_Multilingual"
 
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForTokenClassification.from_pretrained(model_name, torch_dtype=torch.float16 if torch.cuda.is_available() else None)
-    # ONE pipeline; override aggregation per-call
-    pipe = MyPipeline(
-        model=model,
-        tokenizer=tokenizer,
-        device=0,
-        framework="pt"
-    )
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForTokenClassification.from_pretrained(model_name, torch_dtype=torch.float16 if torch.cuda.is_available() else None)
+        # ONE pipeline; override aggregation per-call
+        pipe = MyPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            device=0,
+            framework="pt"
+        )
 
-    # tagged spans
-    results_spans = pipe(text, aggregation_strategy="simple").sort(key=lambda x: x["start"])
+        # tagged spans
+        results_spans = pipe(text, aggregation_strategy="simple").sort(key=lambda x: x["start"])
 
-    # per-token + probabilities
-    results_tokens = pipe(text, aggregation_strategy="none", ignore_labels=[]).sort(key=lambda x: x["start"])
-    print(results_tokens)
+        # per-token + probabilities
+        results_tokens = pipe(text, aggregation_strategy="none", ignore_labels=[]).sort(key=lambda x: x["start"])
+        print(results_tokens)
+    else:   # canned example to test the output display
+        text = "fox in socks"
+        results_spans = [{"start": 4, "end": 6, "entity_group": "p.Locus-p.Locus",
+                          "score": 0.46, "word": "in"}]
+        results_tokens = [
+            {"start": 0, "end": 3, "entity": "O", "score": 1,
+                "probabilities": {"O": 1}},
+            {"start": 4, "end": 6, "entity": "B-p.Locus-p.Locus", "score": 0.46,
+                "probabilities": {"B-p.Locus-p.Locus": 0.46, "B-p.Circumstance-p.Circumstance": 0.3, "B-p.Circumstance-p.Locus": 0.2}},
+            {"start": 7, "end": 12, "entity": "O", "score": 1,
+                "probabilities": {"O": 1}}
+            ]
 
     # color helper that tolerates B-/I- prefixes
     def pick_color(label: str, lbl2color: dict) -> str:
@@ -336,7 +349,9 @@ def classify_tokens(text: str):
 
     styled_html1 = f"<div style='font-family:sans-serif;line-height:1.6;'>{output1}</div>"
     styled_html2 = f"<div style='font-family:sans-serif;line-height:1.6;'>{output2}</div>"
-    return results_spans, json.dumps(results_spans), json.dumps(results_tokens), styled_html1, table_html, styled_html2
+
+    simple_output_data = {"text": text, "entities": [{**e} | {"entity_group": display_label(e["entity_group"])} for e in results_spans]}
+    return simple_output_data, json.dumps(results_spans), json.dumps(results_tokens), styled_html1, table_html, styled_html2
     # except Exception as e:
     #     # Force the real error into the Space logs
     #     import traceback, sys
