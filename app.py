@@ -38,7 +38,7 @@ that has been fine-tuned on manually tagged data in 5 target languages: English,
 The system output is not always correct (even if the model’s confidence estimate is close to 100%),
 and will likely be less accurate beyond the target languages.</p>
 
-<p><i>This demo by Wesley Scivetti and Nathan Schneider, 2025 (<a href="https://github.com/WesScivetti/SNACS_English_Demo">code</a>).</i></p>
+<p><i>This demo by Wesley Scivetti and Nathan Schneider, <a href="http://nert.georgetown.edu">NERT lab</a>, 2025 (<a href="https://github.com/WesScivetti/SNACS_English_Demo">code</a>).</i></p>
 """
 
 # short labels shown on the buttons, long text inserted into the textbox
