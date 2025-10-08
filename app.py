@@ -360,6 +360,7 @@ def classify_tokens(text: str, use_canned=False):
     #     return f"<pre>{html.escape(repr(e))}</pre>", "", ""
 
 
+#final rendering of the Gradio interface
 with gr.Blocks(title="SNACS Tagging") as demo:
     with gr.Row():
         description = gr.HTML(DESCR_TOP)
