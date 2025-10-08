@@ -244,10 +244,12 @@ def classify_tokens(text: str, use_canned=False):
         )
 
         # tagged spans
-        results_spans = pipe(text, aggregation_strategy="simple").sort(key=lambda x: x["start"])
+        results_spans = pipe(text, aggregation_strategy="simple")
+        results_spans.sort(key=lambda x: x["start"])
 
         # per-token + probabilities
-        results_tokens = pipe(text, aggregation_strategy="none", ignore_labels=[]).sort(key=lambda x: x["start"])
+        results_tokens = pipe(text, aggregation_strategy="none", ignore_labels=[])
+        results_tokens.sort(key=lambda x: x["start"])
         print(results_tokens)
     else:   # canned example to test the output display
         text = "fox in socks"
