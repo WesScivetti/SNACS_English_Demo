@@ -6,6 +6,8 @@ from transformers import pipeline, AutoTokenizer, AutoModelForTokenClassificatio
 import torch
 import numpy as np
 
+CUSTOM_CSS = ".textspan { word-break: break-word; white-space: nowrap } /* keep span and tag all on one line */ "
+
 #Description text for the Gradio interface
 DESCR_TOP = """
 <h1 style="text-align: center">SNACS Tagging</h1>
@@ -360,7 +362,7 @@ def classify_tokens(text: str, use_canned=False):
     #     return f"<pre>{html.escape(repr(e))}</pre>", "", ""
 
 
-with gr.Blocks(title="SNACS Tagging") as demo:
+with gr.Blocks(title="SNACS Tagging", css=CUSTOM_CSS) as demo:
     with gr.Row():
         description = gr.HTML(DESCR_TOP)
     
