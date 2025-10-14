@@ -52,6 +52,12 @@ EXAMPLES = [
 ]
 EXAMPLE_LABELS = ['Harry Potter (en)', 'Through the Looking Glass (en)', 'Fresh Prince of Bel-Air (en)', 'Don Quixote (es)']
 
+class FloatEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.float32):
+            return float(obj)
+        return json.JSONEncoder.default(self, obj)
+
 class MyPipeline(TokenClassificationPipeline):
     """Custom Pipeline class with custom postprocess function, designed to output proability distribution in addition to top scores
     Inherits from HF TokenClassificationPipeline"""
@@ -246,10 +252,12 @@ def classify_tokens(text: str, use_canned=False):
         )
 
         # tagged spans
-        results_spans = pipe(text, aggregation_strategy="simple").sort(key=lambda x: x["start"])
+        results_spans = pipe(text, aggregation_strategy="simple")
+        results_spans.sort(key=lambda x: x["start"])
 
         # per-token + probabilities
-        results_tokens = pipe(text, aggregation_strategy="none", ignore_labels=[]).sort(key=lambda x: x["start"])
+        results_tokens = pipe(text, aggregation_strategy="none", ignore_labels=[])
+        results_tokens.sort(key=lambda x: x["start"])
         print(results_tokens)
     else:   # canned example to test the output display
         text = "fox in socks"
@@ -353,7 +361,7 @@ def classify_tokens(text: str, use_canned=False):
     styled_html2 = f"<div style='font-family:sans-serif;line-height:1.6;'>{output2}</div>"
 
     simple_output_data = {"text": text, "entities": [{**e} | {"entity_group": display_label(e["entity_group"])} for e in results_spans]}
-    return simple_output_data, json.dumps(results_spans), json.dumps(results_tokens), styled_html1, table_html, styled_html2
+    return simple_output_data, json.dumps(results_spans, cls=FloatEncoder), json.dumps(results_tokens, cls=FloatEncoder), styled_html1, table_html, styled_html2
     # except Exception as e:
     #     # Force the real error into the Space logs
     #     import traceback, sys
