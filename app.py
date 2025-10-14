@@ -402,7 +402,8 @@ with gr.Blocks(title="SNACS Tagging", css=CUSTOM_CSS) as demo:
                 json_tokens = gr.Code(language="json")
 
     examples.outputs = [simple_output,json_spans,json_tokens,output1,output2,output3]
-    examples.cache_examples = True
+    #DEBUG NEEDED
+    #examples.cache_examples = True
     tag_btn.click(fn=classify_tokens, inputs=input_text, outputs=examples.outputs)
 
 
