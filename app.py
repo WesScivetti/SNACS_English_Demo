@@ -391,11 +391,11 @@ class LazyObj():
         return self._o
 
 simple_output = LazyObj(lambda: gr.HighlightedText(label="Tagged Text"))
-output1 = lambda: gr.HTML(label="SNACS Tagged Sentence")
-output2 = lambda: gr.HTML(label="SNACS Table with Colored Labels")
-output3 = lambda: gr.HTML(label="SNACS Tagged Sentence with No Label Aggregation")
-json_spans = lambda: gr.Code(language="json")
-json_tokens = lambda: gr.Code(language="json")
+output1 = LazyObj(lambda: gr.HTML(label="SNACS Tagged Sentence"))
+output2 = LazyObj(lambda: gr.HTML(label="SNACS Table with Colored Labels"))
+output3 = LazyObj(lambda: gr.HTML(label="SNACS Tagged Sentence with No Label Aggregation"))
+json_spans = LazyObj(lambda: gr.Code(language="json"))
+json_tokens = LazyObj(lambda: gr.Code(language="json"))
 
 #final rendering of the Gradio interface
 with gr.Blocks(title="SNACS Tagging", css=CUSTOM_CSS) as demo:
