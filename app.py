@@ -259,7 +259,7 @@ def classify_tokens(text: str, use_canned=False):
         results_tokens = pipe(text, aggregation_strategy="none", ignore_labels=[])
         results_tokens.sort(key=lambda x: x["start"])
         print(results_tokens)
-    else:   # canned example to test the output display
+    elif use_canned==1:   # canned example to test the output display
         text = "fox in socks"
         results_spans = [{"start": 4, "end": 6, "entity_group": "p.Locus-p.Locus",
                           "score": 0.46, "word": "in"}]
@@ -271,6 +271,12 @@ def classify_tokens(text: str, use_canned=False):
             {"start": 7, "end": 12, "entity": "O", "score": 1,
                 "probabilities": {"O": 1}}
             ]
+    else:   # longer canned example
+        text = EXAMPLES[0][0]
+        with open('harrypotter_spans.json') as spansF:
+            results_spans = json.load(spansF)
+        with open('harrypotter_tokens.json') as toksF:
+            results_tokens = json.load(toksF)
 
     # color helper that tolerates B-/I- prefixes
     def pick_color(label: str, lbl2color: dict) -> str:
@@ -370,6 +376,27 @@ def classify_tokens(text: str, use_canned=False):
     #     return f"<pre>{html.escape(repr(e))}</pre>", "", ""
 
 
+# instantiate output component proxies before layout so they can be provided to Examples component
+# the component itself has to be instantiated during layout
+class LazyObj():
+    """Proxy for object whose construction is delayed"""
+    def __init__(self, constructor_fxn):
+        self._construct = constructor_fxn
+        self._o = None
+        self.__getattr__ = lambda self, name: self._o.__getattr__(name)
+        self.__setattr__ = lambda self, name, val: self._o.__setattr__(name, val) # type: ignore
+    def __call__(self):
+        assert self._o is None
+        self._o = self._construct()
+        return self._o
+
+simple_output = LazyObj(lambda: gr.HighlightedText(label="Tagged Text"))
+output1 = lambda: gr.HTML(label="SNACS Tagged Sentence")
+output2 = lambda: gr.HTML(label="SNACS Table with Colored Labels")
+output3 = lambda: gr.HTML(label="SNACS Tagged Sentence with No Label Aggregation")
+json_spans = lambda: gr.Code(language="json")
+json_tokens = lambda: gr.Code(language="json")
+
 #final rendering of the Gradio interface
 with gr.Blocks(title="SNACS Tagging", css=CUSTOM_CSS) as demo:
     with gr.Row():
@@ -388,23 +415,20 @@ with gr.Blocks(title="SNACS Tagging", css=CUSTOM_CSS) as demo:
         with gr.Column():
             input_text = gr.Textbox(lines=4, placeholder="Enter a sentence...", label="Input Text"),
             tag_btn = gr.Button("Tag!", variant="primary")
-            examples = gr.Examples(EXAMPLES, input_text, example_labels=EXAMPLE_LABELS)
+            examples = gr.Examples(EXAMPLES, input_text, [simple_output,json_spans,json_tokens,output1,output2,output3], example_labels=EXAMPLE_LABELS) # type: ignore
         with gr.Column() as output:
             with gr.Tab("Simple Output"):
-                simple_output = gr.HighlightedText(label="Tagged Text")
+                _simple_output = simple_output()
             with gr.Tab("Detailed Output"):
-                output1 = gr.HTML(label="SNACS Tagged Sentence")
-                output2 = gr.HTML(label="SNACS Table with Colored Labels")
-                output3 = gr.HTML(label="SNACS Tagged Sentence with No Label Aggregation")
+                _output1 = output1()
+                _output2 = output2()
+                _output3 = output3()
             with gr.Tab("JSON Spans"):
-                json_spans = gr.Code(language="json")
+                _json_spans = json_spans()
             with gr.Tab("JSON Tokens"):
-                json_tokens = gr.Code(language="json")
+                _json_tokens = json_tokens()
 
-    examples.outputs = [simple_output,json_spans,json_tokens,output1,output2,output3]
-    #DEBUG NEEDED
-    #examples.cache_examples = True
-    tag_btn.click(fn=classify_tokens, inputs=input_text, outputs=examples.outputs)
+    tag_btn.click(fn=classify_tokens, inputs=input_text, outputs=[_simple_output,_json_spans,_json_tokens,_output1,_output2,_output3])
 
 
 demo.launch()
