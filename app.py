@@ -377,25 +377,12 @@ def classify_tokens(text: str, use_canned=False):
 
 
 # instantiate output component proxies before layout so they can be provided to Examples component
-# the component itself has to be instantiated during layout
-class LazyObj():
-    """Proxy for object whose construction is delayed"""
-    def __init__(self, constructor_fxn):
-        self._construct = constructor_fxn
-        self._o = None
-        self.__getattr__ = lambda self, name: self._o.__getattr__(name)
-        self.__setattr__ = lambda self, name, val: self._o.__setattr__(name, val) # type: ignore
-    def __call__(self):
-        assert self._o is None
-        self._o = self._construct()
-        return self._o
-
-simple_output = LazyObj(lambda: gr.HighlightedText(label="Tagged Text"))
-output1 = LazyObj(lambda: gr.HTML(label="SNACS Tagged Sentence"))
-output2 = LazyObj(lambda: gr.HTML(label="SNACS Table with Colored Labels"))
-output3 = LazyObj(lambda: gr.HTML(label="SNACS Tagged Sentence with No Label Aggregation"))
-json_spans = LazyObj(lambda: gr.Code(language="json"))
-json_tokens = LazyObj(lambda: gr.Code(language="json"))
+simple_output = gr.HighlightedText(label="Tagged Text")
+output1 = gr.HTML(label="SNACS Tagged Sentence")
+output2 = gr.HTML(label="SNACS Table with Colored Labels")
+output3 = gr.HTML(label="SNACS Tagged Sentence with No Label Aggregation")
+json_spans = gr.Code(language="json")
+json_tokens = gr.Code(language="json")
 
 #final rendering of the Gradio interface
 with gr.Blocks(title="SNACS Tagging", css=CUSTOM_CSS) as demo:
@@ -415,20 +402,21 @@ with gr.Blocks(title="SNACS Tagging", css=CUSTOM_CSS) as demo:
         with gr.Column():
             input_text = gr.Textbox(lines=4, placeholder="Enter a sentence...", label="Input Text"),
             tag_btn = gr.Button("Tag!", variant="primary")
-            examples = gr.Examples(EXAMPLES, input_text, [simple_output,json_spans,json_tokens,output1,output2,output3], example_labels=EXAMPLE_LABELS) # type: ignore
+            examples = gr.Examples(EXAMPLES, input_text, [simple_output,json_spans,json_tokens,output1,output2,output3], # type: ignore
+                                   fn=classify_tokens, cache_examples=True, cache_mode="lazy", example_labels=EXAMPLE_LABELS)
         with gr.Column() as output:
             with gr.Tab("Simple Output"):
-                _simple_output = simple_output()
+                simple_output.render()
             with gr.Tab("Detailed Output"):
-                _output1 = output1()
-                _output2 = output2()
-                _output3 = output3()
+                output1.render()
+                output2.render()
+                output3.render()
             with gr.Tab("JSON Spans"):
-                _json_spans = json_spans()
+                json_spans.render()
             with gr.Tab("JSON Tokens"):
-                _json_tokens = json_tokens()
+                json_tokens.render()
 
-    tag_btn.click(fn=classify_tokens, inputs=input_text, outputs=[_simple_output,_json_spans,_json_tokens,_output1,_output2,_output3])
+    tag_btn.click(fn=classify_tokens, inputs=input_text, outputs=[simple_output,json_spans,json_tokens,output1,output2,output3])
 
 
 demo.launch()
