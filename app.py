@@ -403,7 +403,8 @@ with gr.Blocks(title="SNACS Tagging", css=CUSTOM_CSS) as demo:
             input_text = gr.Textbox(lines=4, placeholder="Enter a sentence...", label="Input Text"),
             tag_btn = gr.Button("Tag!", variant="primary")
             examples = gr.Examples(EXAMPLES, input_text, [simple_output,json_spans,json_tokens,output1,output2,output3], # type: ignore
-                                   fn=classify_tokens, cache_examples=True, cache_mode="lazy", example_labels=EXAMPLE_LABELS)
+                                   fn=classify_tokens, cache_examples=False, cache_mode="lazy", example_labels=EXAMPLE_LABELS)
+                                                       # ^ turned off caching because JSON data is too large for paragraph examples
         with gr.Column() as output:
             with gr.Tab("Simple Output"):
                 simple_output.render()
